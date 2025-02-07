@@ -9,9 +9,9 @@ from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, Con
 
 class ModelLoader:
 
-    def __init__(self, data_path: str):
+    def __init__(self, data_path: str, world: int):
         
-        self.data_path = data_path
+        self.data_path = data_path + f"en{world}/"
 
         self.village_models = pd.DataFrame()
         self.player_models = pd.DataFrame()
@@ -23,6 +23,8 @@ class ModelLoader:
         """_summary_
         """
 
+        print(f"Loading data from {self.data_path}...")
+        
         village_data = pd.read_csv(self.data_path + "village.txt", sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
         player_data = pd.read_csv(self.data_path + "player.txt", sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
         tribe_data = pd.read_csv(self.data_path + "ally.txt", sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)

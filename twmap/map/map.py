@@ -16,20 +16,6 @@ class Map:
 
     def __init__(self):
         
-        self.cell_color = "#58761b"
-        self.background_color = "#436213"
-        
-        self.dull_cell_color = "#0c2909"
-        self.dull_background_color = "#395436"
-        self.dull_colors = True
-
-        self.tw_color = "#edd8ad"
-
-        self.village_color = "#823c0a"
-        self.barbarian_color = "#969696"
-
-        self.grid_color = "#000000"
-
         self.world_origin = 500
         self.world_height = 1000
         self.world_width = 1000
@@ -55,6 +41,20 @@ class Map:
 
         self.color_manager = ColorManager()
 
+        self.cell_color = self.color_manager.cell_color
+        self.background_color = self.color_manager.background_color
+        
+        self.dull_cell_color = self.color_manager.dull_cell_color
+        self.dull_background_color = self.color_manager.dull_background_color
+        self.dull_colors = True
+
+        self.tw_color = self.color_manager.tw_color
+
+        self.village_color = self.color_manager.village_color
+        self.barbarian_color = self.color_manager.barbarian_color
+
+        self.grid_color = self.color_manager.grid_color
+
     def draw_legend(self, ids: DataFrame, names: DataFrame):
         
         self.crop_image(self.image, 200)
@@ -75,24 +75,27 @@ class Map:
 
         return self.image
 
-    def draw(self, village_df: DataFrame, id: int):
-
-        villages = [VillageModel(**village) for village in village_df.to_dict(orient="records")]
+    def draw(self, village_df: DataFrame, field: str):
 
         draw = ImageDraw.Draw(self.image)
 
-        color = self.color_manager.get_color(id)
+        for _, village in village_df.iterrows():
 
-        for village in villages:
+            if field == "playerid":
+                color = self.color_manager.get_color(village['playerid'])
+            elif field == "tribeid":
+                color = self.color_manager.get_color(village['tribeid'])
+            elif field == "barbarian" and village['playerid'] == 0:
+                color = self.barbarian_color
+            else:
+                color = self.village_color            
 
-            x = village.x_coord * (self.cell_size + self.spacing)
-            y = village.y_coord * (self.cell_size + self.spacing)
+            x = village['x_coord'] * (self.cell_size + self.spacing)
+            y = village['y_coord'] * (self.cell_size + self.spacing)
 
             draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=color)
         
-
         return self.image
-
     
     def initial_draw(self, village_df: DataFrame):
         
@@ -107,9 +110,9 @@ class Map:
             cell_color = self.cell_color
             background_color = self.background_color
         
-        image = Image.new("RGB", (self.image_height, self.image_width), background_color)
+        self.image = Image.new("RGB", (self.image_height, self.image_width), background_color)
         
-        draw = ImageDraw.Draw(image)
+        draw = ImageDraw.Draw(self.image)
 
         for i in range(0, self.world_height):
 
@@ -125,25 +128,14 @@ class Map:
                 draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=cell_color)
         
 
-        for village in villages:
+        # draw player villages
+        self.draw(village_df, None)
 
-            x = village.x_coord * (self.cell_size + self.spacing)
-            y = village.y_coord * (self.cell_size + self.spacing)
-
-            if village.playerid == 0 and self.show_barbarians:
-                color = self.barbarian_color
-            else: 
-                color = self.village_color
-
-            draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=color)
+        # draw barbarian villages
+        self.draw(village_df, "barbarian")
 
         if self.show_grid:
-            self.draw_grid(image, self.grid_color, 100)
-        
-        # crop around the center
-        # image = self.crop_image(image, 200)
-
-        self.image = image
+            self.draw_grid(self.image, self.grid_color, 100)
 
     def crop_image(self, image: Image, spacing: int):
         
@@ -183,5 +175,5 @@ class Map:
         if self.add_watermark:
             self.watermark("github.com/flipthedog/twmap")
 
-        self.image.save(filename)
+        self.image.save(filename, quality=95)
         
