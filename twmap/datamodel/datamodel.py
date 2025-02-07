@@ -10,6 +10,7 @@ class VillageModel(BaseModel):
     points: int
     unknown1: int
 
+
 class PlayerModel(BaseModel):
     playerid: int
     name: str
@@ -17,6 +18,7 @@ class PlayerModel(BaseModel):
     village_count: int
     points: int
     unknown1: int
+
 
 class TribeModel(BaseModel):
     tribeid: int
@@ -28,9 +30,9 @@ class TribeModel(BaseModel):
     tribe_max_points: int
     rank: int
 
+
 class ConquerModel(BaseModel):
     conquer_id: int
     village_id: int
     new_owner_id: int
     old_owner_id: int
-    

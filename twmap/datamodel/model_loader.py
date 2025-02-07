@@ -2,6 +2,7 @@ import pandas as pd
 
 from pydantic import BaseModel, ValidationError
 from typing import List
+from pandantic import Pandantic
 
 from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
 
@@ -17,6 +18,7 @@ class ModelLoader:
         self.tribe_models = pd.DataFrame()
         self.conquer_models = pd.DataFrame()
 
+
     def load(self):
         """_summary_
         """
@@ -26,35 +28,17 @@ class ModelLoader:
         tribe_data = pd.read_csv(self.data_path + "ally.txt", sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
         conquer_data = pd.read_csv(self.data_path + "conquer.txt", sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
 
-        self.village_models = self.load_df_to_pydantic_models(village_data, VillageModel)
-        self.player_models = self.load_df_to_pydantic_models(player_data, PlayerModel)
-        self.tribe_models = self.load_df_to_pydantic_models(tribe_data, TribeModel)
-        self.conquer_models = self.load_df_to_pydantic_models(conquer_data, ConquerModel)
+        village_schema = Pandantic(VillageModel)
+        player_schema = Pandantic(PlayerModel)
+        tribe_schema = Pandantic(TribeModel)
+        conquer_schema = Pandantic(ConquerModel)
 
-        return self.village_models, self.player_models, self.tribe_models, self.conquer_models
+        self.village_model = village_schema.validate(dataframe=village_data, errors="skip")
+        self.player_model = player_schema.validate(dataframe=player_data, errors="skip")
+        self.tribe_model = tribe_schema.validate(dataframe=tribe_data, errors="skip")
+        self.conquer_model = conquer_schema.validate(dataframe=conquer_data, errors="skip")
 
-    def load_df_to_pydantic_models(self, df: pd.DataFrame, model: BaseModel) -> List[BaseModel]:
-        """_summary_
-
-        Args:
-            df (pd.DataFrame): _description_
-            model (BaseModel): _description_
-
-        Returns:
-            List[BaseModel]: _description_
-        """
-        data_list = df.to_dict(orient="records")
-        model_instances = []
-        for data in data_list:
-            try:
-                model_instance = model(**data)
-                model_instances.append(model_instance)
-            except ValidationError as e:
-                print(f"Validation error: {e}")
-                # Handle validation errors as needed, e.g., skip the row, log the error, etc.
-        
-        return model_instances
-    
+        return self.village_model, self.player_model, self.tribe_model, self.conquer_model
 
 if __name__ == "__main__":
     loader = ModelLoader("data/w144/")

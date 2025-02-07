@@ -1,9 +1,15 @@
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from twmap.datamodel.datamodel import VillageModel
 from pandas import DataFrame 
 
+from twmap.map.colors import ColorManager
+
 from typing import List
+
+from datetime import datetime
+
+import urllib.parse
 
 
 class Map:
@@ -44,11 +50,54 @@ class Map:
         self.image_height = self.world_height * (self.cell_size + self.spacing)
         self.image_width = self.world_width * (self.cell_size + self.spacing)
 
-    def draw(self, villages: List[VillageModel]):
+        self.add_date_time = True
+        self.add_watermark = True
 
-        # draw a grid pattern with each box representing a village
+        self.color_manager = ColorManager()
 
+    def draw_legend(self, ids: DataFrame, names: DataFrame):
+
+        draw = ImageDraw.Draw(self.image)
+
+        ids = ids.to_list()
+        names = names.to_list()
+
+        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
+
+        # Add background
+        draw.rectangle([0, 0, 500, len(ids) * 24], fill="#000000")
+
+        for i in range(0, len(ids)):
+            draw.text((50, i * 24), f"{i}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=font, anchor="lt")
+            draw.rectangle([0, i * 24, 20, i * 24 + 20], fill=self.color_manager.get_color(ids[i]))
+
+        return self.image
+
+    def draw(self, village_df: DataFrame, id: int):
+
+        villages = [VillageModel(**village) for village in village_df.to_dict(orient="records")]
+
+        draw = ImageDraw.Draw(self.image)
+
+        color = self.color_manager.get_color(id)
+
+        for village in villages:
+
+            x = village.x_coord * (self.cell_size + self.spacing)
+            y = village.y_coord * (self.cell_size + self.spacing)
+
+            draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=color)
         
+
+        return self.image
+
+    
+    def initial_draw(self, village_df: DataFrame):
+        
+        # create list of villages
+        villages = [VillageModel(**village) for village in village_df.to_dict(orient="records")]
+        
+        # draw a grid pattern with each box representing a village
         if self.dull_colors:
             cell_color = self.dull_cell_color
             background_color = self.dull_background_color
@@ -90,13 +139,20 @@ class Map:
             self.draw_grid(image, self.grid_color, 100)
         
         # crop around the center
-        image = self.crop_image(image, 200)
+        # image = self.crop_image(image, 200)
 
-        image.show()
+        if self.add_date_time:
+            image = self.add_current_date_time(image)
+        
+        if self.add_watermark:
+            image = self.watermark(image, "github.com/flipthedog/twmap")
+
+        self.image = image
 
     def crop_image(self, image: Image, spacing: int):
-
-        return image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
+        
+        self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
+        return self.image
 
     def draw_grid(self, image: Image, color: str, grid_spacing: int):
         
@@ -109,3 +165,16 @@ class Map:
         for j in range(0, self.world_width, grid_spacing):
             y = j * (self.cell_size + self.spacing) - 1
             draw.line([0, y, self.image_width, y], fill=color, width=1)
+    
+    def add_current_date_time(self, image: Image):
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
+        draw.text((0, 0), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fill=self.tw_color, font=font, anchor="lt")
+        return image
+
+    def watermark(self, image: Image, text: str):
+        draw = ImageDraw.Draw(image)
+        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
+        width, height = image.size
+        draw.text((width - 10, height - 10), text, fill=self.tw_color, font=font, anchor="rb")
+        return image
