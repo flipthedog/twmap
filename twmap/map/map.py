@@ -55,6 +55,8 @@ class Map:
 
         self.grid_color = self.color_manager.grid_color
 
+        self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", 24)  # Load the font here
+
     def draw_legend(self, ids: DataFrame, names: DataFrame):
         
         self.crop_image(self.image, 200)
@@ -64,13 +66,11 @@ class Map:
         ids = ids.to_list()
         names = names.to_list()
 
-        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
-
         # Add background
         draw.rectangle([0, 0, 500, len(ids) * 24], fill="#000000")
 
         for i in range(0, len(ids)):
-            draw.text((50, i * 24), f"{i}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=font, anchor="lt")
+            draw.text((50, i * 24), f"{i}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
             draw.rectangle([0, i * 24, 20, i * 24 + 20], fill=self.color_manager.get_color(ids[i]))
 
         return self.image
@@ -118,12 +118,8 @@ class Map:
 
             for j in range(0, self.world_width):
 
-                # print(f"Drawing cell at {i}, {j}")
-
                 x = i * (self.cell_size + self.spacing)
                 y = j * (self.cell_size + self.spacing)
-
-                # print(f"Drawing cell at {x}, {y}")
 
                 draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=cell_color)
         
@@ -156,16 +152,12 @@ class Map:
     
     def add_current_date_time(self):
         draw = ImageDraw.Draw(self.image)
-        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
-        width, height = self.image.size
-        draw.text((0, height - 10), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fill=self.tw_color, font=font, anchor="lb")
+        draw.text((0, self.image.height - 10), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fill=self.tw_color, font=self.font, anchor="lb")
         return self.image
 
     def watermark(self, text: str):
         draw = ImageDraw.Draw(self.image)
-        font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
-        width, height = self.image.size
-        draw.text((width - 10, height - 10), text, fill=self.tw_color, font=font, anchor="rb")
+        draw.text((self.image.width - 10, self.image.height - 10), text, fill=self.tw_color, font=self.font, anchor="rb")
         return self.image
         
     def save(self, filename: str):
@@ -175,5 +167,4 @@ class Map:
         if self.add_watermark:
             self.watermark("github.com/flipthedog/twmap")
 
-        self.image.save(filename, quality=95)
-        
+        # self.image.save(filename, quality=95)

@@ -1,5 +1,6 @@
 import requests
 import os
+import logging
 
 from typing import List
 
@@ -20,6 +21,8 @@ class TWAPI:
             "conquer": "/map/conquer.txt"
         }
 
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
     def get_files(self, save_location: str = "data/"):
         for url in self.urls:
             world = url.split('.')[0].replace("https://", "")
@@ -35,7 +38,7 @@ class TWAPI:
                 with open(os.path.join(world_save_location, f"{key}.txt"), "w") as f:
                     f.write(response.text)
                 
-                print(f"Saved {key}.txt to {world_save_location}")
+                logging.info(f"Saved {key}.txt to {world_save_location}")
 
                 # delay of 10 seconds
                 time.sleep(10)
@@ -46,4 +49,3 @@ if __name__ == "__main__":
     tw_api = TWAPI([144], "en")
 
     tw_api.get_files()
-    

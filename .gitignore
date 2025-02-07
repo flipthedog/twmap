@@ -1,6 +1,8 @@
 # images
 *.png
 images/
+*.sh
+map/fonts
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

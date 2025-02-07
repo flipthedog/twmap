@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class TWMap:
 
-    def __init__(self, data_refresh=False, worlds=[144, 145], storage_path="data/", save_to_s3=False, s3_bucket="twmap-timelapse", s3_path="data/"):
+    def __init__(self, data_refresh=False, worlds=[144, 145], storage_path="data/", save_to_s3=False, s3_bucket="tw-timelapse", s3_path="data/"):
         self.LOAD_NEW = data_refresh
         self.worlds = worlds
         self.data_path = storage_path
@@ -28,7 +28,7 @@ class TWMap:
 
         if save_to_s3:
             logging.info("Setting up S3 client")
-            self.session = boto3.Session()
+            self.session = boto3.Session(region_name="us-east-2")
             self.s3 = self.session.client("s3")
             self.s3_bucket = s3_bucket
             self.s3_path = s3_path
@@ -61,7 +61,7 @@ class TWMap:
 
             top_player_map.draw_legend(ids=t10_players["playerid"], names=t10_players["name"])
             top_tribe_map.draw_legend(ids=t10_tribes["tribeid"], names=t10_tribes["name"])
-            world_folder = os.path.join("images", f"world_{world}")
+            world_folder = os.path.join("images", f"world_{world}").replace("\\", "/")
             os.makedirs(world_folder, exist_ok=True)
 
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -77,10 +77,10 @@ class TWMap:
         buffer = BytesIO()
         image.save(buffer, format="PNG")
         buffer.seek(0)
-        self.s3.put_object(Bucket=self.s3_bucket, Key=os.path.join(self.s3_path, folder, filename), Body=buffer, ContentType='image/png')
+        self.s3.put_object(Bucket=self.s3_bucket, Key=self.s3_path + folder + "/" + filename, Body=buffer, ContentType='image/png')
 
 if __name__ == "__main__":
     logging.info("Starting TWMap")
-    twmap = TWMap(data_refresh=False)
+    twmap = TWMap(data_refresh=True, save_to_s3=True)
     twmap.generate_maps()
     logging.info("Finished generating maps")
