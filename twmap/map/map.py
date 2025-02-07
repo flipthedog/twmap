@@ -56,6 +56,8 @@ class Map:
         self.color_manager = ColorManager()
 
     def draw_legend(self, ids: DataFrame, names: DataFrame):
+        
+        self.crop_image(self.image, 200)
 
         draw = ImageDraw.Draw(self.image)
 
@@ -141,12 +143,6 @@ class Map:
         # crop around the center
         # image = self.crop_image(image, 200)
 
-        if self.add_date_time:
-            image = self.add_current_date_time(image)
-        
-        if self.add_watermark:
-            image = self.watermark(image, "github.com/flipthedog/twmap")
-
         self.image = image
 
     def crop_image(self, image: Image, spacing: int):
@@ -166,15 +162,26 @@ class Map:
             y = j * (self.cell_size + self.spacing) - 1
             draw.line([0, y, self.image_width, y], fill=color, width=1)
     
-    def add_current_date_time(self, image: Image):
-        draw = ImageDraw.Draw(image)
+    def add_current_date_time(self):
+        draw = ImageDraw.Draw(self.image)
         font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
-        draw.text((0, 0), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fill=self.tw_color, font=font, anchor="lt")
-        return image
+        width, height = self.image.size
+        draw.text((0, height - 10), datetime.now().strftime("%Y-%m-%d %H:%M:%S"), fill=self.tw_color, font=font, anchor="lb")
+        return self.image
 
-    def watermark(self, image: Image, text: str):
-        draw = ImageDraw.Draw(image)
+    def watermark(self, text: str):
+        draw = ImageDraw.Draw(self.image)
         font = ImageFont.truetype("arial.ttf", 24)  # Specify the font size here
-        width, height = image.size
+        width, height = self.image.size
         draw.text((width - 10, height - 10), text, fill=self.tw_color, font=font, anchor="rb")
-        return image
+        return self.image
+        
+    def save(self, filename: str):
+        if self.add_date_time:
+            self.add_current_date_time()
+        
+        if self.add_watermark:
+            self.watermark("github.com/flipthedog/twmap")
+
+        self.image.save(filename)
+        
