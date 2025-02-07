@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "twmap"
+version = "0.1.0"
+description = ""
+authors = ["Floris"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pandas = "^2.2.3"
+pydantic = "^2.10.6"
+pillow = "^11.1.0"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
