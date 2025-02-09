@@ -88,13 +88,9 @@ class Map:
         self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", 24)  # Load the font here
 
         self.initial_map()
-        if self.add_date_time:
-            self.add_current_date_time()
-        
-        if self.add_watermark:
-            self.watermark("github.com/flipthedog/twmap")
-        
+
         self.initial_image = deepcopy(self.image)
+        
         self.image_top_players = self.draw_top_players().copy()  # Save the map with top players
         self.color_manager.reset_color_index()
         self.image_top_tribes = self.draw_top_tribes().copy()  # Save the map with top tribes
@@ -136,6 +132,12 @@ class Map:
 
         if self.show_grid:
             self.draw_grid(self.image, self.grid_color, 100)
+            
+        if self.watermark:
+            self.watermark("github.com/flipthedog/twmap")
+        
+        if self.add_current_date_time:
+            self.add_current_date_time()
 
     def draw_top_players(self):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
@@ -155,6 +157,13 @@ class Map:
         
         image = self.crop_image(image, 200)
 
+        if self.watermark:  
+            image = self.watermark("github.com/flipthedog/twmap")
+        
+        if self.add_current_date_time:
+            
+            image = self.add_current_date_time()
+        
         draw = ImageDraw.Draw(image)
 
         if top_type == "players":

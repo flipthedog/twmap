@@ -3,33 +3,39 @@ import logging
 from twmap.datamodel.dataloader import DataLoader
 from twmap.map.map import Map
 
+import os
+
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class MapFactory:
     
-    def __init__(self, s3_path: str, save_location: str = "ïmages"):
+    def __init__(self, s3_path: str, save_location: str = "images"):
         self.s3_path = s3_path
-        self.loader = DataLoader(s3_path)
+        self.loader = DataLoader(s3_path, "data/", refresh=False)
         
-        self.village_models, self.player_models, self.tribe_models, self.conquer_models = self.loader.load_s3()
+        self.village_models, self.player_models, self.tribe_models, self.conquer_models = self.loader.load()
         
-        self.world_id = self.loader.village_files["world_id"].iloc[0]
-        
-        self.times = self.loader.village_files["datetime"].dt.strftime("%Y%m%d_%H%M%S").tolist()
-        
-        self.save_location = save_location + f"/{self.world_id}"
+        self.world_id = self.loader.world_id
+        self.image_save_location = save_location + f"/{self.world_id}"
     
     def create_maps(self):
         
-        for i in range(len(self.times)):
+        for i in range(len(self.village_models)):
+            village_model = self.village_models[i]
             
-            logging.info(f"Creating map for {self.times[i]}")
-            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i])
-            top_tribes_image = map.image_top_tribes_with_legend
-            top_players_image = map.image_top_players_with_legend
+            map_time = village_model.iloc[0]["datetime"].strftime("%Y-%m-%d %H:%M:%S")
+            map_save_time = village_model.iloc[0]["datetime"].strftime("%Y%m%d_%H%M%S")
+            world_id = village_model.iloc[0]["world_id"]
             
-            top_tribes_image.save(f"{self.save_location}/top_tribes_{self.times[i]}.png")
-            top_players_image.save(f"{self.save_location}/top_players_{self.times[i]}.png")
+            logging.info(f"Creating maps for world {world_id} at time {map_time}")
+            
+            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time)
+            
+            if not os.path.exists(self.image_save_location):
+                os.makedirs(self.image_save_location)
+            
+            map.image_top_tribes_with_legend.save(self.image_save_location + f"/top_tribes_{world_id}_{map_save_time}.png")
+            map.image_top_players_with_legend.save(self.image_save_location + f"/top_players_{world_id}_{map_save_time}.png")
 
 if __name__ == "__main__":
     factory = MapFactory("s3://tribalwars-scraped/en144/")
