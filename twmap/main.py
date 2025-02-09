@@ -1,10 +1,10 @@
 import logging
 from map.map import Map
-from datamodel.model_loader import ModelLoader
+from twmap.datamodel.dataloader import ModelLoader
 from datamodel.datafilter import DataFilter
 from copy import deepcopy
 from twmap.api.twapi import TWAPI
-from datetime import datetime
+from datetime import datetime, timezone
 import os
 import boto3
 from io import BytesIO
@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class TWMap:
 
-    def __init__(self, data_refresh=False, worlds=[144, 145], storage_path="data/", save_to_s3=False, s3_bucket="tw-timelapse", s3_path="data/"):
+    def __init__(self, data_refresh=False, worlds=[144], storage_path="data/", save_to_s3=False, s3_bucket="tw-timelapse", s3_path="data/"):
         self.LOAD_NEW = data_refresh
         self.worlds = worlds
         self.data_path = storage_path
@@ -34,6 +34,7 @@ class TWMap:
             self.s3_path = s3_path
 
     def generate_maps(self):
+
         for world in self.worlds:
             logging.info(f"Processing world {world}...")
             loader = ModelLoader(data_path=self.data_path, world=world)
@@ -44,6 +45,10 @@ class TWMap:
             t10_tribes_v = filter.get_t10_tribe_villages()
             t10_players = filter.get_t10_players()
             t10_tribes = filter.get_t10_tribes()
+
+            recent_conquers = filter.get_past_day_conquers()
+            recent_conquers_p10 = filter.get_past_day_t10_conquers_players()
+            recent_conquers_t10 = filter.get_past_day_t10_conquers_tribes()
 
             map = Map()
             map.initial_draw(village_models)
@@ -57,20 +62,30 @@ class TWMap:
             logging.info(f"Drawing {len(t10_tribes_v)} villages of top 10 tribes")
 
             top_player_map.draw(t10_players_v, field="playerid")
+            top_player_map.draw(recent_conquers_p10, field="playerid", size_multiplier=3)
             top_tribe_map.draw(t10_tribes_v, field="tribeid")
+            top_tribe_map.draw(recent_conquers_t10, field="tribeid", size_multiplier=3) 
+
+            # draw recent conquers
+            # logging.info(f"Drawing {len(recent_conquers)} recent conquers")
+            # top_player_map.draw(recent_conquers, field=None, size_multiplier=3)
 
             top_player_map.draw_legend(ids=t10_players["playerid"], names=t10_players["name"])
             top_tribe_map.draw_legend(ids=t10_tribes["tribeid"], names=t10_tribes["name"])
+            
             world_folder = os.path.join("images", f"world_{world}").replace("\\", "/")
+            
             os.makedirs(world_folder, exist_ok=True)
 
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            top_player_map.save(os.path.join(world_folder, f"top_players_world_{world}_{timestamp}.png"))
-            top_tribe_map.save(os.path.join(world_folder, f"top_tribes_world_{world}_{timestamp}.png"))
+            timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
 
             if self.save_to_s3:
                 self.upload_to_s3(top_player_map.image, world_folder, f"top_players_world_{world}_{timestamp}.png")
                 self.upload_to_s3(top_tribe_map.image, world_folder, f"top_tribes_world_{world}_{timestamp}.png")
+            else:
+                logging.info(f"Saving images to {world_folder}")
+                top_player_map.save(os.path.join("images", f"world_{world}", f"top_players_world_{world}_{timestamp}.png"), s3_save=False)
+                top_tribe_map.save(os.path.join("images", f"world_{world}", f"top_tribes_world_{world}_{timestamp}.png"), s3_save=False)
 
     def upload_to_s3(self, image, folder, filename):
         logging.info(f"Uploading {filename} to S3 bucket {self.s3_bucket}")
@@ -81,6 +96,6 @@ class TWMap:
 
 if __name__ == "__main__":
     logging.info("Starting TWMap")
-    twmap = TWMap(data_refresh=True, save_to_s3=True)
+    twmap = TWMap(data_refresh=False, save_to_s3=False)
     twmap.generate_maps()
     logging.info("Finished generating maps")

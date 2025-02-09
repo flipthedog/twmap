@@ -1,6 +1,8 @@
 from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
 
 import pandas as pd
+import logging
+
 
 class DataFilter:
 
@@ -11,7 +13,48 @@ class DataFilter:
         self.conquer_df = conquer_df
 
         self.joined_player_villages = pd.merge(self.village_df, self.player_df, on="playerid")
-    
+
+        # TODO: Make this a factory so we don't call function multiple times
+
+    def get_past_day_conquers(self):
+        """Get conquers from the past day. Uses the epoch timestamp to filter. Return filter on village df
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day.
+        """
+        past_day = pd.Timestamp.now().timestamp() - 86400  # 86400 seconds in a day
+        
+        logging.info(f"Past day (epoch): {past_day}")
+        logging.info(f"Conquer df: {self.conquer_df}")
+
+        past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_day]
+        if past_day_conquers.empty:
+            print("No conquers found in the past day.")
+        return self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
+
+    def get_past_day_t10_conquers_players(self):
+        """Get conquers from the past day of top 10 players. Uses the epoch timestamp to filter. Return filter on village df
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day of top 10 players.
+        """
+        past_day_conquers = self.get_past_day_conquers()
+        t10_players = self.get_t10_players()
+        t10_player_villages = pd.concat([self.filter_villages_player(player_id) for player_id in t10_players["playerid"]], ignore_index=True)
+        return t10_player_villages[t10_player_villages["villageid"].isin(past_day_conquers["villageid"])]
+
+    def get_past_day_t10_conquers_tribes(self):
+        """Get conquers from the past day of top 10 tribes. Uses the epoch timestamp to filter. Return filter on village df
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day of top 10 tribes.
+        """
+        past_day_conquers = self.get_past_day_conquers()
+        t10_tribes = self.get_t10_tribes()
+        t10_tribe_villages = pd.concat([self.filter_villages_tribe(tribeid) for tribeid in t10_tribes["tribeid"]], ignore_index=True)
+        t10_tribe_villages = t10_tribe_villages.merge(self.player_df[['playerid', 'tribeid']], on='playerid', how='left')
+        return t10_tribe_villages[t10_tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+
     def get_t10_players(self):
         """Get top 10 players by points and return list of ids
 
@@ -65,5 +108,5 @@ class DataFilter:
         t10_tribes = self.get_t10_tribes()
         t10_tribe_villages = [self.filter_villages_tribe(tribe_id) for tribe_id in t10_tribes["tribeid"]]
         result_df = pd.concat(t10_tribe_villages, ignore_index=True)
-        result_df = result_df.merge(self.player_df[['playerid', 'tribeid']], on='playerid', how='left')
+        result_df = result_df.merge(self.player_df[['playerid', 'tribeid']], on='playerid', how='left')        
         return result_df

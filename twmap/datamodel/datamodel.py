@@ -32,7 +32,7 @@ class TribeModel(BaseModel):
 
 
 class ConquerModel(BaseModel):
-    conquer_id: int
-    village_id: int
+    villageid: int
+    timestamp: int
     new_owner_id: int
     old_owner_id: int

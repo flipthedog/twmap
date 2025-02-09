@@ -8,7 +8,7 @@ class ColorManager:
         self.color_map = {}
 
         self.colors =  [
-'#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
+            '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
         ]
 
         self.cell_color = "#58761b"
@@ -25,9 +25,15 @@ class ColorManager:
 
         self.grid_color = "#000000"
         
-    def get_unique_color(self):
+        self.color_index = 0
 
-        return self.colors.pop(0)
+    def reset_color_index(self):
+        self.color_index = 0
+
+    def get_unique_color(self):
+        color = self.colors[self.color_index % len(self.colors)]
+        self.color_index += 1
+        return color
     
     def get_color(self, key: str):
         if key in self.color_map:

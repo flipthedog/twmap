@@ -1,16 +1,12 @@
 import pandas as pd
-
-from pydantic import BaseModel, ValidationError
-from typing import List
 from pandantic import Pandantic
 
 from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
 
-
-class ModelLoader:
+class DataLoader:
 
     def __init__(self, data_path: str, world: int):
-        
+        # TODO: Add future support for loading from cloud
         self.data_path = data_path + f"en{world}/"
 
         self.village_models = pd.DataFrame()
@@ -20,7 +16,7 @@ class ModelLoader:
 
 
     def load(self):
-        """_summary_
+        """Load data from the data path and validate the data against the models.
         """
 
         print(f"Loading data from {self.data_path}...")
@@ -43,7 +39,7 @@ class ModelLoader:
         return self.village_model, self.player_model, self.tribe_model, self.conquer_model
 
 if __name__ == "__main__":
-    loader = ModelLoader("data/w144/")
+    loader = DataLoader("data/w144/")
 
     village_models, player_models, tribe_models, conquer_models = loader.load()
     print(village_models)
