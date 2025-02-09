@@ -1,0 +1,105 @@
+_is_copy,_mgr,_item_cache,_attrs,_flags
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=13759, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 13759, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 13759, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 13759, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=13848, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 13848, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 13848, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 13848, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=13848, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 13848, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 13848, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 13848, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=13890, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 13890, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 13890, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 13890, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=13929, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 13929, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 13929, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 13929, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14002, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14002, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14002, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14002, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14071, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14071, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14071, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14071, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14134, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14134, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14134, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14134, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14195, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14195, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14195, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14195, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14244, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14244, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14244, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14244, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14299, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14299, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14299, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14299, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14359, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14359, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14359, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14359, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>
+,"BlockManager
+Items: Index(['villageid', 'timestamp', 'new_owner_id', 'old_owner_id', 'datetime',
+       'world_id'],
+      dtype='object')
+Axis 1: RangeIndex(start=0, stop=14436, step=1)
+NumpyBlock: slice(0, 4, 1), 4 x 14436, dtype: int64
+DatetimeLikeBlock: slice(4, 5, 1), 1 x 14436, dtype: datetime64[ns]
+NumpyBlock: slice(5, 6, 1), 1 x 14436, dtype: object",{},{},<Flags(allows_duplicate_labels=True)>

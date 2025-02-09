@@ -5,9 +5,9 @@ from twmap.map.map import Map
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-load_data = DataLoader("data/", 144)
+loader = DataLoader("s3://tribalwars-scraped/en144/")
 
-village_models, player_models, tribe_models, conquer_models = load_data.load()
+village_models, player_models, tribe_models, conquer_models = loader.load_s3()
 
 map = Map(village_models, player_models, tribe_models, conquer_models)
 
