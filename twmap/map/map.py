@@ -46,6 +46,9 @@ class Map:
         self.t10_players = self.data_filter.get_t10_players()
         self.t10_tribes = self.data_filter.get_t10_tribes()
 
+        self.past_day_conquers_p10 = self.data_filter.get_past_day_t10_conquers_players()
+        self.past_day_conquers_t10 = self.data_filter.get_past_day_t10_conquers_tribes()
+        
         self.world_origin = 500
         self.world_height = 1000
         self.world_width = 1000
@@ -144,6 +147,7 @@ class Map:
         logging.info(f"Found {len(self.t10_players)} top players")
         self.image = self.initial_image
         self.draw(self.t10_players_v, "playerid")
+        self.draw(self.past_day_conquers_p10, "playerid", 3)
         return self.image
     
     def draw_top_tribes(self):
@@ -151,6 +155,7 @@ class Map:
         logging.info(f"Found {len(self.t10_tribes)} top tribes")
         self.image = self.initial_image
         self.draw(self.t10_tribes_v, "tribeid")
+        self.draw(self.past_day_conquers_t10, "tribeid", 3)
         return self.image
 
     def draw_legend(self, top_type: str = "players", image: Image = None):
@@ -176,11 +181,13 @@ class Map:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
-        draw.rectangle([0, 0, 500, len(ids) * 24], fill="#000000")
+        draw.rectangle([0, 0, 500, (len(ids) + 1) * 24], fill="#000000")
 
+        draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        
         for i in range(0, len(ids)):
-            draw.text((50, i * 24), f"{i}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.rectangle([0, i * 24, 20, i * 24 + 20], fill=self.color_manager.get_color(ids[i]))
+            draw.text((50, (i + 1) * 24), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.rectangle([0, (i + 1) * 24, 20, (i + 1) * 24 + 20], fill=self.color_manager.get_color(ids[i]))
 
         return image
 

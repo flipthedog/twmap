@@ -22,12 +22,20 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing conquers from the past day.
         """
-        past_day = pd.Timestamp.now().timestamp() - 86400  # 86400 seconds in a day
         
-        logging.info(f"Past day (epoch): {past_day}")
-        logging.info(f"Conquer df: {self.conquer_df}")
-
+        data_pull_datetime = self.conquer_df["datetime"]
+        
+        # convert to epoch timestamp
+        data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y-%m-%d %H:%M:%S")
+        data_pull_datetime = data_pull_datetime.astype(int) // 10**9
+        
+        # grab the first value
+        data_pull_datetime = data_pull_datetime.iloc[0]
+                
+        past_day = data_pull_datetime - 86400
+        
         past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_day]
+        
         if past_day_conquers.empty:
             print("No conquers found in the past day.")
         return self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
