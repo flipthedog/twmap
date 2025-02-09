@@ -35,7 +35,7 @@ class MapFactory:
             
             logging.info(f"Creating maps for world {world_id} at time {map_time}")
             
-            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time)
+            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id)
             
             if not os.path.exists(self.image_save_location):
                 os.makedirs(self.image_save_location)

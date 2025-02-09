@@ -9,7 +9,7 @@ s3_paths = [
     "s3://tribalwars-scraped/en145/",
 ]
 
-MAX_IMAGES = None
+MAX_IMAGES = 1
 
 for s3_path in s3_paths:
     map_factory = MapFactory(s3_path, refresh=False)

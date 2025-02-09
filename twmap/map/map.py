@@ -18,7 +18,7 @@ from copy import deepcopy
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None):
+    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None):
         """Load it with TW data and create a map
 
         Args:
@@ -34,7 +34,8 @@ class Map:
         self.conquer_df = conquer_df
         
         self.printed_datetime = printed_datetime
-
+        self.printed_world = printed_world
+        
         if self.printed_datetime is None:
             self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             # TODO: read this from the file
@@ -58,9 +59,10 @@ class Map:
 
         self.show_barbarians = True
 
-        self.max_x = 0
-        self.max_y = 0
-
+        self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
+        self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
+        self.max_border = max(self.max_x, self.max_y)
+                
         self.zoom = 3
 
         self.cell_size = 4
@@ -88,7 +90,8 @@ class Map:
 
         self.grid_color = self.color_manager.grid_color
 
-        self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", 24)  # Load the font here
+        self.font_size = 32
+        self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", self.font_size)  # Load the font here
 
         self.initial_map()
 
@@ -160,7 +163,7 @@ class Map:
 
     def draw_legend(self, top_type: str = "players", image: Image = None):
         
-        image = self.crop_image(image, 200)
+        image = self.crop_image(image)
 
         if self.watermark:  
             image = self.watermark("github.com/flipthedog/twmap")
@@ -181,13 +184,13 @@ class Map:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
-        draw.rectangle([0, 0, 500, (len(ids) + 1) * 24], fill="#000000")
+        draw.rectangle([0, 0, 450, (len(ids) + 1) * self.font_size], fill="#000000")
 
         draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
         for i in range(0, len(ids)):
-            draw.text((50, (i + 1) * 24), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.rectangle([0, (i + 1) * 24, 20, (i + 1) * 24 + 20], fill=self.color_manager.get_color(ids[i]))
+            draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(ids[i]))
 
         return image
 
@@ -215,9 +218,12 @@ class Map:
 
         return self.image
     
-    def crop_image(self, image: Image, spacing: int):
+    def crop_image(self, image: Image):
+        
+        spacing = self.max_border
         
         self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
+        
         return self.image
 
     def draw_grid(self, image: Image, color: str, grid_spacing: int):
@@ -234,7 +240,10 @@ class Map:
     
     def add_current_date_time(self):
         draw = ImageDraw.Draw(self.image)
-        draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=self.font, anchor="lb")
+        if self.printed_world:
+            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC - " + self.printed_world, fill=self.tw_color, font=self.font, anchor="lb")
+        else:
+            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=self.font, anchor="lb")
         return self.image
 
     def watermark(self, text: str):
