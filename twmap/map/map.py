@@ -1,6 +1,8 @@
 from PIL import Image, ImageDraw, ImageFont
 
-from pandas import DataFrame 
+import pandas as pd
+from pandas import DataFrame
+from sklearn.cluster import KMeans 
 
 from twmap.datamodel.datafilter import DataFilter
 from twmap.datamodel.datamodel import VillageModel
@@ -14,6 +16,7 @@ import urllib.parse
 
 import logging
 from copy import deepcopy
+from scipy.spatial import ConvexHull
 
 
 class Map:
@@ -96,9 +99,10 @@ class Map:
         self.initial_map()
 
         self.initial_image = deepcopy(self.image)
-        
+                
         self.image_top_players = self.draw_top_players().copy()  # Save the map with top players
         self.color_manager.reset_color_index()
+        
         self.image_top_tribes = self.draw_top_tribes().copy()  # Save the map with top tribes
 
         self.image_top_players_with_legend = self.draw_legend("players", self.image_top_players)  # Save the map with top players and legend
@@ -148,17 +152,20 @@ class Map:
     def draw_top_players(self):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
         logging.info(f"Found {len(self.t10_players)} top players")
-        self.image = self.initial_image
+        self.image = deepcopy(self.initial_image)
         self.draw(self.t10_players_v, "playerid")
         self.draw(self.past_day_conquers_p10, "playerid", 3)
+        # Call the function to draw zones of control for the top 10 player villages
+        self.draw_zones_of_control(self.t10_players_v, 10)
         return self.image
     
     def draw_top_tribes(self):
         logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
         logging.info(f"Found {len(self.t10_tribes)} top tribes")
-        self.image = self.initial_image
+        self.image = deepcopy(self.initial_image)
         self.draw(self.t10_tribes_v, "tribeid")
         self.draw(self.past_day_conquers_t10, "tribeid", 3)
+        self.draw_zones_of_control(self.t10_tribes_v, 10, "tribeid")
         return self.image
 
     def draw_legend(self, top_type: str = "players", image: Image = None):
@@ -253,3 +260,44 @@ class Map:
         
     def local_save(self, filename: str):
         self.image.save(filename, quality=95)
+
+    def draw_zones_of_control(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
+        """
+        Draw zones of control for the top N players or tribes using Convex Hull and mark the centroid.
+
+        Args:
+            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
+            top_n (int): Number of top players or tribes to draw zones for.
+            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
+        """
+        if filter_type == "playerid":
+            top_entities = self.t10_players.head(top_n)
+        elif filter_type == "tribeid":
+            top_entities = self.t10_tribes.head(top_n)
+        else:
+            raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
+
+        draw = ImageDraw.Draw(self.image, 'RGBA')
+
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            if entity_villages.empty:
+                continue
+
+            village_coords = entity_villages[['x_coord', 'y_coord']].values
+            if len(village_coords) > 2:
+                hull = ConvexHull(village_coords)
+                polygon = [
+                    (
+                        village_coords[vertex, 0] * (self.cell_size + self.spacing),
+                        village_coords[vertex, 1] * (self.cell_size + self.spacing)
+                    )
+                    for vertex in hull.vertices
+                ]
+                color = self.color_manager.get_color(entity_id)
+                color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 100)
+                draw.polygon(polygon, outline=color, fill=fill_color)
+
+        return self.image
