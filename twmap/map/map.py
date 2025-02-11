@@ -197,7 +197,7 @@ class Map:
         self.color_manager.reset_color_index()
         return self.image
     
-    def draw_legend(self, top_type: str = "players", image: Image = None):
+    def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
         
         image = self.crop_image(image)
 
@@ -205,24 +205,31 @@ class Map:
             image = self.watermark("github.com/flipthedog/twmap")
         
         if self.add_current_date_time:
-            
             image = self.add_current_date_time()
         
         draw = ImageDraw.Draw(image)
 
         if top_type == "players":
-            ids = self.t10_players['playerid'].to_list()
-            names = self.t10_players['name'].to_list()
+            if specific:
+                ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
+                names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
+            else:
+                ids = self.t10_players['playerid'].to_list()
+                names = self.t10_players['name'].to_list()
         elif top_type == "tribes":
-            ids = self.t10_tribes['tribeid'].to_list()
-            names = self.t10_tribes['name'].to_list()
+            if specific:
+                ids = self.tribe_df[self.tribe_df['name'].isin(self.tribe_list)]['tribeid'].tolist()
+                names = self.tribe_df[self.tribe_df['name'].isin(self.tribe_list)]['name'].tolist()
+            else:
+                ids = self.t10_tribes['tribeid'].to_list()
+                names = self.t10_tribes['name'].to_list()
         else:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
         draw.rectangle([0, 0, 450, (len(ids) + 1) * self.font_size], fill="#000000")
 
-        draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        draw.text((0, 0), f"Top {top_type.capitalize() if not specific else 'Specific ' + top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
         for i in range(0, len(ids)):
             draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")

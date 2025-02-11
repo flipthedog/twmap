@@ -41,9 +41,9 @@ class MapFactory:
             if not os.path.exists(self.image_save_location):
                 os.makedirs(self.image_save_location)
             
-            image_top_players = map.draw_top_players().copy()  # Save the map with top players
+            image_top_players = map.draw_top_players(center_text=True).copy()  # Save the map with top players
         
-            image_top_tribes = map.draw_top_tribes(center_text=True).copy()  # Save the map with top tribes
+            image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=True).copy()  # Save the map with top tribes
 
             image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Save the map with top players and legend
             image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Save the map with top tribes and legend
@@ -75,12 +75,12 @@ class MapFactory:
             
             if specific_players:
                 image_specific_players = map.draw_specific_players().copy()  # Save the map with specific players
-                image_specific_players_with_legend = map.draw_legend("players", image_specific_players)  # Save the map with specific players and legend
+                image_specific_players_with_legend = map.draw_legend("players", image_specific_players, True)  # Save the map with specific players and legend
                 image_specific_players_with_legend.save(self.image_save_location + f"/custom_players_{world_id}_{map_save_time}.png")
             
             if specific_tribes:
                 image_specific_tribes = map.draw_specific_tribes(center_text=True).copy()  # Save the map with specific tribes
-                image_specific_tribes_with_legend = map.draw_legend("tribes", image_specific_tribes)  # Save the map with specific tribes and legend
+                image_specific_tribes_with_legend = map.draw_legend("tribes",image_specific_tribes, True)  # Save the map with specific tribes and legend
                 image_specific_tribes_with_legend.save(self.image_save_location + f"/custom_tribes_{world_id}_{map_save_time}.png")
 
 if __name__ == "__main__":
