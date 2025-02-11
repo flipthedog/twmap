@@ -109,9 +109,8 @@ class Map:
         self.image_top_tribes_with_legend = self.draw_legend("tribes", self.image_top_tribes)  # Save the map with top tribes and legend
 
     def initial_map(self):
-
-        # create list of villages
-        villages = [VillageModel(**village) for village in self.village_df.to_dict(orient="records")]
+        """Create an initial map with all player villages and barbarians.
+        """
         
         # draw a grid pattern with each box representing a village
         if self.dull_colors:
@@ -149,23 +148,25 @@ class Map:
         if self.add_current_date_time:
             self.add_current_date_time()
 
-    def draw_top_players(self):
+    def draw_top_players(self, top_villages: DataFrame, zones_of_control: bool = False):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
         logging.info(f"Found {len(self.t10_players)} top players")
         self.image = deepcopy(self.initial_image)
         self.draw(self.t10_players_v, "playerid")
         self.draw(self.past_day_conquers_p10, "playerid", 3)
         # Call the function to draw zones of control for the top 10 player villages
-        self.draw_zones_of_control(self.t10_players_v, 10)
+        if zones_of_control:
+            self.draw_zones_of_control(self.t10_players_v, 10)
         return self.image
     
-    def draw_top_tribes(self):
+    def draw_top_tribes(self, top_villages: DataFrame, zones_of_control: bool = False):
         logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
         logging.info(f"Found {len(self.t10_tribes)} top tribes")
         self.image = deepcopy(self.initial_image)
         self.draw(self.t10_tribes_v, "tribeid")
         self.draw(self.past_day_conquers_t10, "tribeid", 3)
-        self.draw_zones_of_control(self.t10_tribes_v, 10, "tribeid")
+        if zones_of_control:
+            self.draw_zones_of_control(self.t10_tribes_v, 10, "tribeid")
         return self.image
 
     def draw_legend(self, top_type: str = "players", image: Image = None):
@@ -297,7 +298,24 @@ class Map:
                 ]
                 color = self.color_manager.get_color(entity_id)
                 color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 100)
+                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 60)
                 draw.polygon(polygon, outline=color, fill=fill_color)
+
+                # # Calculate the bounding box for the ellipse
+                # min_x = min(p[0] for p in polygon)
+                # max_x = max(p[0] for p in polygon)
+                # min_y = min(p[1] for p in polygon)
+                # max_y = max(p[1] for p in polygon)
+
+                # # Draw the ellipse
+                # draw.ellipse([min_x, min_y, max_x, max_y], outline=color, fill=fill_color)
+                
+                # Calculate centroid
+                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
+                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
+
+                # Draw the name at the centroid
+                name = urllib.parse.unquote_plus(entity['name'])
+                draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
 
         return self.image

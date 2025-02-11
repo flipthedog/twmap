@@ -118,3 +118,51 @@ class DataFilter:
         result_df = pd.concat(t10_tribe_villages, ignore_index=True)
         result_df = result_df.merge(self.player_df[['playerid', 'tribeid']], on='playerid', how='left')        
         return result_df
+
+    def filter_players(self, player_ids: list):
+        """Filter players by list of player ids.
+
+        Args:
+            player_ids (list): List of player ids.
+
+        Returns:
+            pd.DataFrame: DataFrame containing players of the specified player ids.
+        """
+        self.player_df = self.player_df[self.player_df["playerid"].isin(player_ids)]
+        return self.player_df
+    
+    def filter_tribes(self, tribe_ids: list):
+        """Filter tribes by list of tribe ids.
+
+        Args:
+            tribe_ids (list): List of tribe ids.
+
+        Returns:
+            pd.DataFrame: DataFrame containing tribes of the specified tribe ids.
+        """
+        self.tribe_df = self.tribe_df[self.tribe_df["tribeid"].isin(tribe_ids)]
+        return self.tribe_df
+
+    def filter_by_tribe_names(self, tribe_names: list):
+        """Filter tribes by list of tribe names.
+
+        Args:
+            tribe_names (list): List of tribe names.
+
+        Returns:
+            pd.DataFrame: DataFrame containing tribes of the specified tribe names.
+        """
+        self.tribe_df = self.tribe_df[self.tribe_df["name"].isin(tribe_names)]
+        return self.tribe_df
+    
+    def filter_by_player_names(self, player_names: list):
+        """Filter players by list of player names.
+
+        Args:
+            player_names (list): List of player names.
+
+        Returns:
+            pd.DataFrame: DataFrame containing players of the specified player names.
+        """
+        self.player_df = self.player_df[self.player_df["name"].isin(player_names)]
+        return self.player_df

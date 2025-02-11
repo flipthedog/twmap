@@ -137,6 +137,8 @@ class DataLoader:
     def load(self):
         """Load the data from the local path, or download from S3 if refresh is True"""
         
+        # TODO: Add functionality to load a specific timeframe
+        
         if self.refresh:
             self.download_and_save()
         

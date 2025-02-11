@@ -7,6 +7,9 @@ Creating pretty maps for Tribal Wars with Python. Uses the TW API to retrieve wo
 
 The following is a sample of images
 
+# Timelapse W144
+![](./images/timelapse.gif)
+
 ## World 144
 ![](./images/top_players.png)
 ![](./images/top_tribes.png)
