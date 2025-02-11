@@ -9,7 +9,7 @@ s3_paths = [
     "s3://tribalwars-scraped/en145/",
 ]
 
-MAX_IMAGES = None
+MAX_IMAGES = 1
 
 player_names = [
     'SirolfR'
@@ -20,6 +20,6 @@ tribe_names = [
 ]
 
 for s3_path in s3_paths:
-    map_factory = MapFactory(s3_path, refresh=True)
-    map_factory.create_top_10_maps(max_images=MAX_IMAGES)
-    
+    map_factory = MapFactory(s3_path, refresh=False)
+    # map_factory.create_top_10_maps(max_images=MAX_IMAGES)
+    map_factory.create_maps(max_images=MAX_IMAGES, specific_tribes=tribe_names, specific_players=player_names)

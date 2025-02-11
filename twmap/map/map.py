@@ -21,7 +21,7 @@ from scipy.spatial import ConvexHull
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None):
+    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None):
         """Load it with TW data and create a map
 
         Args:
@@ -53,6 +53,14 @@ class Map:
         self.past_day_conquers_p10 = self.data_filter.get_past_day_t10_conquers_players()
         self.past_day_conquers_t10 = self.data_filter.get_past_day_t10_conquers_tribes()
         
+        if player_list:
+            logging.info(f"Player list: {player_list}")
+            self.player_list = player_list
+            self.player_village = self.data_filter.filter_villages_by_player_names(player_list)
+        if tribe_list:
+            logging.info(f"Tribe list: {tribe_list}")
+            self.tribe_list = tribe_list
+            self.tribe_village = self.data_filter.filter_villages_by_tribe_names(tribe_list)        
         self.world_origin = 500
         self.world_height = 1000
         self.world_width = 1000
@@ -99,14 +107,6 @@ class Map:
         self.initial_map()
 
         self.initial_image = deepcopy(self.image)
-                
-        self.image_top_players = self.draw_top_players().copy()  # Save the map with top players
-        self.color_manager.reset_color_index()
-        
-        self.image_top_tribes = self.draw_top_tribes().copy()  # Save the map with top tribes
-
-        self.image_top_players_with_legend = self.draw_legend("players", self.image_top_players)  # Save the map with top players and legend
-        self.image_top_tribes_with_legend = self.draw_legend("tribes", self.image_top_tribes)  # Save the map with top tribes and legend
 
     def initial_map(self):
         """Create an initial map with all player villages and barbarians.
@@ -147,8 +147,8 @@ class Map:
         
         if self.add_current_date_time:
             self.add_current_date_time()
-
-    def draw_top_players(self, top_villages: DataFrame, zones_of_control: bool = False):
+    
+    def draw_top_players(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
         logging.info(f"Found {len(self.t10_players)} top players")
         self.image = deepcopy(self.initial_image)
@@ -157,9 +157,12 @@ class Map:
         # Call the function to draw zones of control for the top 10 player villages
         if zones_of_control:
             self.draw_zones_of_control(self.t10_players_v, 10)
+        if center_text:
+            self.draw_centroid_text(self.t10_players_v, 10, "playerid")
+        self.color_manager.reset_color_index()
         return self.image
     
-    def draw_top_tribes(self, top_villages: DataFrame, zones_of_control: bool = False):
+    def draw_top_tribes(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
         logging.info(f"Found {len(self.t10_tribes)} top tribes")
         self.image = deepcopy(self.initial_image)
@@ -167,8 +170,33 @@ class Map:
         self.draw(self.past_day_conquers_t10, "tribeid", 3)
         if zones_of_control:
             self.draw_zones_of_control(self.t10_tribes_v, 10, "tribeid")
+        if center_text:
+            self.draw_centroid_text(self.t10_tribes_v, 10, "tribeid")
+        self.color_manager.reset_color_index()
         return self.image
 
+    def draw_specific_players(self, zones_of_control: bool = False, center_text: bool = False):
+        logging.info(f"Drawing {len(self.player_village)} villages of specific players")
+        self.image = deepcopy(self.initial_image)
+        self.draw(self.player_village, "playerid")
+        if zones_of_control:
+            self.draw_zones_of_control(self.player_village, len(self.player_list))
+        if center_text:
+            self.draw_centroid_text(self.player_village, len(self.player_list), "playerid")
+        self.color_manager.reset_color_index()
+        return self.image
+    
+    def draw_specific_tribes(self, zones_of_control: bool = False, center_text: bool = False):
+        logging.info(f"Drawing {len(self.tribe_village)} villages of specific tribes")
+        self.image = deepcopy(self.initial_image)
+        self.draw(self.tribe_village, "tribeid")
+        if zones_of_control:
+            self.draw_zones_of_control(self.tribe_village, len(self.tribe_list), "tribeid")
+        if center_text:
+            self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "tribeid")
+        self.color_manager.reset_color_index()
+        return self.image
+    
     def draw_legend(self, top_type: str = "players", image: Image = None):
         
         image = self.crop_image(image)
@@ -314,6 +342,48 @@ class Map:
                 centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
                 centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
 
+                # Draw the name at the centroid
+                name = urllib.parse.unquote_plus(entity['name'])
+                draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
+
+        return self.image
+
+    def draw_centroid_text(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
+        """
+        Draw zones of control for the top N players or tribes and mark the centroid with text.
+
+        Args:
+            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
+            top_n (int): Number of top players or tribes to draw zones for.
+            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
+        """
+        if filter_type == "playerid":
+            top_entities = self.t10_players.head(top_n)
+        elif filter_type == "tribeid":
+            top_entities = self.t10_tribes.head(top_n)
+        else:
+            raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
+
+        draw = ImageDraw.Draw(self.image, 'RGBA')
+
+
+        
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            
+            color = self.color_manager.get_color(entity_id)
+            color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 60)
+            if entity_villages.empty:
+                continue
+
+            village_coords = entity_villages[['x_coord', 'y_coord']].values
+            if len(village_coords) > 2:
+                # Calculate centroid
+                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
+                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
+        
                 # Draw the name at the centroid
                 name = urllib.parse.unquote_plus(entity['name'])
                 draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")

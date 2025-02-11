@@ -41,8 +41,15 @@ class MapFactory:
             if not os.path.exists(self.image_save_location):
                 os.makedirs(self.image_save_location)
             
-            map.image_top_tribes_with_legend.save(self.image_save_location + f"/top_tribes_{world_id}_{map_save_time}.png")
-            map.image_top_players_with_legend.save(self.image_save_location + f"/top_players_{world_id}_{map_save_time}.png")
+            image_top_players = map.draw_top_players().copy()  # Save the map with top players
+        
+            image_top_tribes = map.draw_top_tribes(center_text=True).copy()  # Save the map with top tribes
+
+            image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Save the map with top players and legend
+            image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Save the map with top tribes and legend
+            
+            image_top_tribes_with_legend.save(self.image_save_location + f"/top_tribes_{world_id}_{map_save_time}.png")
+            image_top_players_with_legend.save(self.image_save_location + f"/top_players_{world_id}_{map_save_time}.png")
         
     def create_maps(self, max_images: int = None, specific_tribes: List[str] = None, specific_players: List[str] = None):
         
@@ -61,13 +68,20 @@ class MapFactory:
             
             logging.info(f"Creating maps for world {world_id} at time {map_time}")
             
-            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, specific_players=specific_players, specific_tribes=specific_tribes)
+            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, player_list=specific_players, tribe_list=specific_tribes)
             
             if not os.path.exists(self.image_save_location):
                 os.makedirs(self.image_save_location)
             
-            map.image_top_tribes_with_legend.save(self.image_save_location + f"/top_tribes_{world_id}_{map_save_time}.png")
-            map.image_top_players_with_legend.save(self.image_save_location + f"/top_players_{world_id}_{map_save_time}.png")
+            if specific_players:
+                image_specific_players = map.draw_specific_players().copy()  # Save the map with specific players
+                image_specific_players_with_legend = map.draw_legend("players", image_specific_players)  # Save the map with specific players and legend
+                image_specific_players_with_legend.save(self.image_save_location + f"/custom_players_{world_id}_{map_save_time}.png")
+            
+            if specific_tribes:
+                image_specific_tribes = map.draw_specific_tribes(center_text=True).copy()  # Save the map with specific tribes
+                image_specific_tribes_with_legend = map.draw_legend("tribes", image_specific_tribes)  # Save the map with specific tribes and legend
+                image_specific_tribes_with_legend.save(self.image_save_location + f"/custom_tribes_{world_id}_{map_save_time}.png")
 
 if __name__ == "__main__":
     factory = MapFactory("s3://tribalwars-scraped/en144/")

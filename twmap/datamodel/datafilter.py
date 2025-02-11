@@ -1,8 +1,6 @@
 from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
-
 import pandas as pd
 import logging
-
 
 class DataFilter:
 
@@ -14,7 +12,10 @@ class DataFilter:
 
         self.joined_player_villages = pd.merge(self.village_df, self.player_df, on="playerid")
 
-        # TODO: Make this a factory so we don't call function multiple times
+        # Cache variables
+        self._past_day_conquers = None
+        self._t10_players = None
+        self._t10_tribes = None
 
     def get_past_day_conquers(self):
         """Get conquers from the past day. Uses the epoch timestamp to filter. Return filter on village df
@@ -22,23 +23,17 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing conquers from the past day.
         """
-        
-        data_pull_datetime = self.conquer_df["datetime"]
-        
-        # convert to epoch timestamp
-        data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y-%m-%d %H:%M:%S")
-        data_pull_datetime = data_pull_datetime.astype(int) // 10**9
-        
-        # grab the first value
-        data_pull_datetime = data_pull_datetime.iloc[0]
-                
-        past_day = data_pull_datetime - 86400
-        
-        past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_day]
-        
-        if past_day_conquers.empty:
-            print("No conquers found in the past day.")
-        return self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
+        if self._past_day_conquers is None:
+            data_pull_datetime = self.conquer_df["datetime"]
+            data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y-%m-%d %H:%M:%S")
+            data_pull_datetime = data_pull_datetime.astype(int) // 10**9
+            data_pull_datetime = data_pull_datetime.iloc[0]
+            past_day = data_pull_datetime - 86400
+            past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_day]
+            if past_day_conquers.empty:
+                logging.info("No conquers found in the past day.")
+            self._past_day_conquers = self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
+        return self._past_day_conquers
 
     def get_past_day_t10_conquers_players(self):
         """Get conquers from the past day of top 10 players. Uses the epoch timestamp to filter. Return filter on village df
@@ -67,9 +62,11 @@ class DataFilter:
         """Get top 10 players by points and return list of ids
 
         Returns:
-            _type_: _description_
+            pd.DataFrame: DataFrame containing top 10 players by points.
         """
-        return self.player_df.nlargest(10, "points")
+        if self._t10_players is None:
+            self._t10_players = self.player_df.nlargest(10, "points")
+        return self._t10_players
     
     def get_t10_tribes(self):
         """Get top 10 tribes by points.
@@ -77,7 +74,9 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing top 10 tribes by points.
         """
-        return self.tribe_df.nlargest(10, "tribe_points")
+        if self._t10_tribes is None:
+            self._t10_tribes = self.tribe_df.nlargest(10, "tribe_points")
+        return self._t10_tribes
 
     def filter_villages_player(self, player_id: int):
         """Filter villages by player id.
@@ -128,8 +127,7 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing players of the specified player ids.
         """
-        self.player_df = self.player_df[self.player_df["playerid"].isin(player_ids)]
-        return self.player_df
+        return self.player_df[self.player_df["playerid"].isin(player_ids)]
     
     def filter_tribes(self, tribe_ids: list):
         """Filter tribes by list of tribe ids.
@@ -140,8 +138,7 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing tribes of the specified tribe ids.
         """
-        self.tribe_df = self.tribe_df[self.tribe_df["tribeid"].isin(tribe_ids)]
-        return self.tribe_df
+        return self.tribe_df[self.tribe_df["tribeid"].isin(tribe_ids)]
 
     def filter_by_tribe_names(self, tribe_names: list):
         """Filter tribes by list of tribe names.
@@ -152,8 +149,7 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing tribes of the specified tribe names.
         """
-        self.tribe_df = self.tribe_df[self.tribe_df["name"].isin(tribe_names)]
-        return self.tribe_df
+        return self.tribe_df[self.tribe_df["name"].isin(tribe_names)]
     
     def filter_by_player_names(self, player_names: list):
         """Filter players by list of player names.
@@ -164,5 +160,31 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing players of the specified player names.
         """
-        self.player_df = self.player_df[self.player_df["name"].isin(player_names)]
-        return self.player_df
+        return self.player_df[self.player_df["name"].isin(player_names)]
+
+    def filter_villages_by_player_names(self, player_names: list):
+        """Filter villages by list of player names.
+
+        Args:
+            player_names (list): List of player names.
+
+        Returns:
+            pd.DataFrame: DataFrame containing villages of the specified player names.
+        """
+        player_df = self.filter_by_player_names(player_names)
+        return self.village_df[self.village_df["playerid"].isin(player_df["playerid"])]
+    
+    def filter_villages_by_tribe_names(self, tribe_names: list):
+        """Filter villages by list of tribe names.
+
+        Args:
+            tribe_names (list): List of tribe names.
+
+        Returns:
+            pd.DataFrame: DataFrame containing villages of the specified tribe names with tribeid included.
+        """
+        tribe_df = self.filter_by_tribe_names(tribe_names)
+        players_in_tribes = self.player_df[self.player_df["tribeid"].isin(tribe_df["tribeid"])]
+        villages = self.village_df[self.village_df["playerid"].isin(players_in_tribes["playerid"])]
+        return villages.merge(players_in_tribes[['playerid', 'tribeid']], on='playerid', how='left')
+    
