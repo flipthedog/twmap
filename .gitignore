@@ -1,7 +1,7 @@
 # images
 *.png
 images/
-*.sh
+commands.sh
 map/fonts
 notes
 data/
