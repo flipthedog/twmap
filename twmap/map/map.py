@@ -21,7 +21,7 @@ from scipy.spatial import ConvexHull
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None):
+    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None):
         """Load it with TW data and create a map
 
         Args:
@@ -57,10 +57,13 @@ class Map:
             logging.info(f"Player list: {player_list}")
             self.player_list = player_list
             self.player_village = self.data_filter.filter_villages_by_player_names(player_list)
+            self.player_conquer = self.data_filter.get_past_day_conquers_by_player_names(player_list)
         if tribe_list:
             logging.info(f"Tribe list: {tribe_list}")
             self.tribe_list = tribe_list
-            self.tribe_village = self.data_filter.filter_villages_by_tribe_names(tribe_list)        
+            self.tribe_village = self.data_filter.filter_villages_by_tribe_tags(tribe_list)
+            self.tribe_conquer = self.data_filter.get_past_day_conquers_by_tribe_tags(tribe_list)
+               
         self.world_origin = 500
         self.world_height = 1000
         self.world_width = 1000
@@ -70,10 +73,11 @@ class Map:
 
         self.show_barbarians = True
 
-        self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
-        self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
-        self.max_border = max(self.max_x, self.max_y)
-                
+        # self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
+        # self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
+        # self.max_border = max(self.max_x, self.max_y)
+        self.max_border = 190
+        
         self.zoom = 3
 
         self.cell_size = 4
@@ -87,6 +91,10 @@ class Map:
 
         self.color_manager = ColorManager()
 
+        if custom_color_map:
+            logging.info("Loaded custom color map")
+            self.color_manager.create_custom_color_map(custom_color_map)
+            
         self.cell_color = self.color_manager.cell_color
         self.background_color = self.color_manager.background_color
         
@@ -142,8 +150,8 @@ class Map:
         if self.show_grid:
             self.draw_grid(self.image, self.grid_color, 100)
             
-        if self.watermark:
-            self.watermark("github.com/flipthedog/twmap")
+        if self.add_watermark:
+            self.watermark("SirolfR")
         
         if self.add_current_date_time:
             self.add_current_date_time()
@@ -179,30 +187,30 @@ class Map:
         logging.info(f"Drawing {len(self.player_village)} villages of specific players")
         self.image = deepcopy(self.initial_image)
         self.draw(self.player_village, "playerid")
+        self.draw(self.player_conquer, "playerid", 3)
         if zones_of_control:
             self.draw_zones_of_control(self.player_village, len(self.player_list))
         if center_text:
-            self.draw_centroid_text(self.player_village, len(self.player_list), "playerid")
-        self.color_manager.reset_color_index()
+            self.draw_centroid_text(self.player_village, len(self.player_list), "specificplayer")
         return self.image
     
     def draw_specific_tribes(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.tribe_village)} villages of specific tribes")
         self.image = deepcopy(self.initial_image)
         self.draw(self.tribe_village, "tribeid")
+        self.draw(self.tribe_conquer, "tribeid", 3)
         if zones_of_control:
-            self.draw_zones_of_control(self.tribe_village, len(self.tribe_list), "tribeid")
+            self.draw_zones_of_control(self.tribe_village, len(self.tribe_list), "specifictribe")
         if center_text:
-            self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "tribeid")
-        self.color_manager.reset_color_index()
+            self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "specifictribe")
         return self.image
     
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
         
         image = self.crop_image(image)
 
-        if self.watermark:  
-            image = self.watermark("github.com/flipthedog/twmap")
+        if self.add_watermark:  
+            image = self.watermark("SirolfR")
         
         if self.add_current_date_time:
             image = self.add_current_date_time()
@@ -218,8 +226,8 @@ class Map:
                 names = self.t10_players['name'].to_list()
         elif top_type == "tribes":
             if specific:
-                ids = self.tribe_df[self.tribe_df['name'].isin(self.tribe_list)]['tribeid'].tolist()
-                names = self.tribe_df[self.tribe_df['name'].isin(self.tribe_list)]['name'].tolist()
+                ids = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)]['tribeid'].tolist()
+                names = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)]['name'].tolist()
             else:
                 ids = self.t10_tribes['tribeid'].to_list()
                 names = self.t10_tribes['name'].to_list()
@@ -229,7 +237,10 @@ class Map:
         # Add background
         draw.rectangle([0, 0, 450, (len(ids) + 1) * self.font_size], fill="#000000")
 
-        draw.text((0, 0), f"Top {top_type.capitalize() if not specific else 'Specific ' + top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        if specific:
+            draw.text((0, 0), "Tribe Legend", fill=self.tw_color, font=self.font, anchor="lt")
+        else:
+            draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
         for i in range(0, len(ids)):
             draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
@@ -310,6 +321,12 @@ class Map:
             top_entities = self.t10_players.head(top_n)
         elif filter_type == "tribeid":
             top_entities = self.t10_tribes.head(top_n)
+        elif filter_type == "specifictribe":
+            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
+            filter_type = "tribeid"
+        elif filter_type == "specificplayer":
+            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
+            filter_type = "playerid"
         else:
             raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
 
@@ -333,18 +350,9 @@ class Map:
                 ]
                 color = self.color_manager.get_color(entity_id)
                 color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 60)
+                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 40)
                 draw.polygon(polygon, outline=color, fill=fill_color)
 
-                # # Calculate the bounding box for the ellipse
-                # min_x = min(p[0] for p in polygon)
-                # max_x = max(p[0] for p in polygon)
-                # min_y = min(p[1] for p in polygon)
-                # max_y = max(p[1] for p in polygon)
-
-                # # Draw the ellipse
-                # draw.ellipse([min_x, min_y, max_x, max_y], outline=color, fill=fill_color)
-                
                 # Calculate centroid
                 centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
                 centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
@@ -368,13 +376,17 @@ class Map:
             top_entities = self.t10_players.head(top_n)
         elif filter_type == "tribeid":
             top_entities = self.t10_tribes.head(top_n)
+        elif filter_type == "specifictribe":
+            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
+            filter_type = "tribeid"
+        elif filter_type == "specificplayer":
+            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
+            filter_type = "playerid"
         else:
             raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
 
         draw = ImageDraw.Draw(self.image, 'RGBA')
 
-
-        
         for _, entity in top_entities.iterrows():
             entity_id = entity[filter_type]
             entity_villages = village_df[village_df[filter_type] == entity_id]
@@ -390,9 +402,9 @@ class Map:
                 # Calculate centroid
                 centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
                 centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
-        
-                # Draw the name at the centroid
-                name = urllib.parse.unquote_plus(entity['name'])
-                draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
+            
+            # Draw the name at the centroid
+            name = urllib.parse.unquote_plus(entity['name'])
+            draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
 
         return self.image

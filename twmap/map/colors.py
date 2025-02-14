@@ -1,5 +1,5 @@
 import random
-
+import logging
 
 class ColorManager:
 
@@ -10,7 +10,7 @@ class ColorManager:
         self.colors =  [
             '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
         ]
-
+        
         self.cell_color = "#58761b"
         self.background_color = "#436213"
 
@@ -27,6 +27,9 @@ class ColorManager:
         
         self.color_index = 0
 
+    def create_custom_color_map(self, custom_color_map: dict):
+        self.color_map = custom_color_map
+    
     def reset_color_index(self):
         self.color_index = 0
 
@@ -36,6 +39,7 @@ class ColorManager:
         return color
     
     def get_color(self, key: str):
+        key = str(key)
         if key in self.color_map:
             return self.color_map[key]
         else:

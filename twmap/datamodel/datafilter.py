@@ -140,16 +140,16 @@ class DataFilter:
         """
         return self.tribe_df[self.tribe_df["tribeid"].isin(tribe_ids)]
 
-    def filter_by_tribe_names(self, tribe_names: list):
-        """Filter tribes by list of tribe names.
+    def filter_by_tribe_tags(self, tribe_tags: list):
+        """Filter tribes by list of tribe tags.
 
         Args:
-            tribe_names (list): List of tribe names.
+            tribe_tags (list): List of tribe tags.
 
         Returns:
-            pd.DataFrame: DataFrame containing tribes of the specified tribe names.
+            pd.DataFrame: DataFrame containing tribes of the specified tribe tags.
         """
-        return self.tribe_df[self.tribe_df["name"].isin(tribe_names)]
+        return self.tribe_df[self.tribe_df["tag"].isin(tribe_tags)]
     
     def filter_by_player_names(self, player_names: list):
         """Filter players by list of player names.
@@ -174,17 +174,42 @@ class DataFilter:
         player_df = self.filter_by_player_names(player_names)
         return self.village_df[self.village_df["playerid"].isin(player_df["playerid"])]
     
-    def filter_villages_by_tribe_names(self, tribe_names: list):
-        """Filter villages by list of tribe names.
+    def filter_villages_by_tribe_tags(self, tribe_tags: list):
+        """Filter villages by list of tribe tags.
 
         Args:
-            tribe_names (list): List of tribe names.
+            tribe_tags (list): List of tribe tags.
 
         Returns:
-            pd.DataFrame: DataFrame containing villages of the specified tribe names with tribeid included.
+            pd.DataFrame: DataFrame containing villages of the specified tribe tags with tribeid included.
         """
-        tribe_df = self.filter_by_tribe_names(tribe_names)
+        tribe_df = self.filter_by_tribe_tags(tribe_tags)
         players_in_tribes = self.player_df[self.player_df["tribeid"].isin(tribe_df["tribeid"])]
         villages = self.village_df[self.village_df["playerid"].isin(players_in_tribes["playerid"])]
         return villages.merge(players_in_tribes[['playerid', 'tribeid']], on='playerid', how='left')
     
+    def get_past_day_conquers_by_tribe_tags(self, tribe_tags: list):
+        """Get conquers from the past day of tribes specified by tags. Uses the epoch timestamp to filter. Return filter on village df
+
+        Args:
+            tribe_tags (list): List of tribe tags.
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day of tribes specified by tags.
+        """
+        tribe_villages = self.filter_villages_by_tribe_tags(tribe_tags)
+        past_day_conquers = self.get_past_day_conquers()
+        return tribe_villages[tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+    
+    def get_past_day_conquers_by_player_names(self, player_names: list):
+        """Get conquers from the past day of players specified by names. Uses the epoch timestamp to filter. Return filter on village df
+
+        Args:
+            player_names (list): List of player names.
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day of players specified by names.
+        """
+        player_villages = self.filter_villages_by_player_names(player_names)
+        past_day_conquers = self.get_past_day_conquers()
+        return player_villages[player_villages["villageid"].isin(past_day_conquers["villageid"])]
