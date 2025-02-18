@@ -56,12 +56,24 @@ class MapFactory:
             image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Save the map with top players and legend
             image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Save the map with top tribes and legend
             
-            # image_top_tribes_with_legend.save(os.path.join(tribe_save_location, f"top_tribes_{world_id}_{map_save_time}.png"))
-            # image_top_players_with_legend.save(os.path.join(player_save_location, f"top_players_{world_id}_{map_save_time}.png"))
-            
-            image_top_tribes_with_legend.save(os.path.join(tribe_save_location, f"{i}.png"))
             image_top_players_with_legend.save(os.path.join(player_save_location, f"{i}.png"))
-        
+
+            # Create zone of control map
+            image_top_tribes_zoc = map.draw_top_tribes(center_text=True, zones_of_control=True).copy()
+            image_top_tribes_with_legend_zoc = map.draw_legend("tribes", image_top_tribes_zoc)
+            
+            zoc_save_location = os.path.join(tribe_save_location, "zoc")
+            if not os.path.exists(zoc_save_location):
+                os.makedirs(zoc_save_location)
+            
+            image_top_tribes_with_legend_zoc.save(os.path.join(zoc_save_location, f"{i}.png"))
+
+            no_zoc_save_location = os.path.join(tribe_save_location, "no_zoc")
+            if not os.path.exists(no_zoc_save_location):
+                os.makedirs(no_zoc_save_location)
+            
+            image_top_tribes_with_legend.save(os.path.join(no_zoc_save_location, f"{i}.png"))
+            
     def create_maps(self, max_images: int = None, specific_tribes: List[str] = None, specific_players: List[str] = None):
         
         if max_images is not None:

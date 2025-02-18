@@ -73,10 +73,10 @@ class Map:
 
         self.show_barbarians = True
 
-        # self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
-        # self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
-        # self.max_border = max(self.max_x, self.max_y)
-        self.max_border = 190
+        self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
+        self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
+        self.max_border = max(self.max_x, self.max_y)
+        # self.max_border = 190
         
         self.zoom = 3
 
