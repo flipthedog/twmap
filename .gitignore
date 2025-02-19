@@ -5,6 +5,9 @@ commands.sh
 map/fonts
 notes
 data/
+*.gif
+*.jpg
+*.mp4
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

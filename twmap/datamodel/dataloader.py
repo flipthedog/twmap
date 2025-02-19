@@ -221,7 +221,17 @@ class DataLoader:
         top_10_players = player_df.groupby("name")["points"].max().sort_values(ascending=False).head(10)
         
         return top_10_players
+    
+    def get_max_village_coordinates(self):
+        """Get the max village coordinates over multiple dataframes
+        """
         
+        village_df = pd.concat(self.village_models)
+        
+        max_village_coordinates = village_df.groupby("name")["x", "y"].max()
+        
+        return max_village_coordinates
+    
 if __name__ == "__main__":
     loader = DataLoader("s3://tribalwars-scraped/en144/", "data/", refresh=False)
     village_models, player_models, tribe_models, conquer_models = loader.load()

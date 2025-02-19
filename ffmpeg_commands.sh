@@ -24,24 +24,29 @@ if [ "$generate_all" == "y" ]; then
         mkdir -p $output_dir
 
         # Players
-        # ffmpeg -framerate 5 -i $dir/players/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/player_output.mp4 -y
+        ffmpeg -framerate 5 -i $dir/players/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/player_output.mp4 -y -thread_queue_size 1024
 
-        palette_file="palette_$(basename $dir).png"
-        ffmpeg -thread_queue_size 1024 -framerate 5 -i images/en144/players/%d.png -vf "palettegen=max_colors=32" -update 1 $palette_file -y   
-        ffmpeg -thread_queue_size 1024 -framerate 5 -i $dir/players/%d.png -i $palette_file -lavfi "paletteuse" $output_dir/player_output.gif -y
+        # based on the generated mp4 create a gif with better quality
+        ffmpeg -i $output_dir/player_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,palettegen" -y $output_dir/palette.png
+        ffmpeg -i $output_dir/player_output.mp4 -i $output_dir/palette.png -lavfi "fps=5,scale=iw/2:-1:flags=lanczos,paletteuse" -y $output_dir/player_output.gif -thread_queue_size 1024
 
-        # # Tribes with zones of control
-        # ffmpeg -framerate 5 -i $dir/tribes/zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/tribe_zoc_output.mp4 -y
+        # Tribes with zones of control
+        ffmpeg -framerate 5 -i $dir/tribes/zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/tribe_zoc_output.mp4 -y -thread_queue_size 1024
 
-        # ffmpeg -framerate 5 -i $dir/tribes/zoc/%d.png -vf "palettegen" palette.png -y
-        # ffmpeg -framerate 5 -i $dir/tribes/zoc/%d.png -i palette.png -lavfi "paletteuse" -fps_mode vfr $output_dir/tribe_zoc_output.gif -y
+        # based on the generated mp4 create a gif with better quality
+        ffmpeg -i $output_dir/tribe_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,palettegen" -y $output_dir/palette.png -thread_queue_size 1024
+        ffmpeg -i $output_dir/tribe_zoc_output.mp4 -i $output_dir/palette.png -lavfi "fps=5,scale=iw/2:-1:flags=lanczos,paletteuse" -y $output_dir/tribe_zoc_output.gif -thread_queue_size 1024
 
-        # # Tribes without zones of control
-        # ffmpeg -framerate 5 -i $dir/tribes/no_zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/tribe_no_zoc_output.mp4 -y
+        # Tribes without zones of control
+        ffmpeg -framerate 5 -i $dir/tribes/no_zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p $output_dir/tribe_no_zoc_output.mp4 -y -thread_queue_size 1024
 
-        # ffmpeg -framerate 5 -i $dir/tribes/no_zoc/%d.png -vf "palettegen" palette.png -y
-        # ffmpeg -framerate 5 -i $dir/tribes/no_zoc/%d.png -i palette.png -lavfi "paletteuse" -fps_mode vfr $output_dir/tribe_no_zoc_output.gif -y
+        # based on the generated mp4 create a gif with better quality
+        ffmpeg -i $output_dir/tribe_no_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,palettegen" -y $output_dir/palette.png -thread_queue_size 1024
+        ffmpeg -i $output_dir/tribe_no_zoc_output.mp4 -i $output_dir/palette.png -lavfi "fps=5,scale=iw/2:-1:flags=lanczos,paletteuse" -y $output_dir/tribe_no_zoc_output.gif -thread_queue_size 1024
 
+        # remove pallette.png
+        rm $output_dir/palette.png
+        
         end_time=$(date +%s)
         elapsed_time=$((end_time - start_time))
         echo "Time taken for $dir: $elapsed_time seconds"
