@@ -5,6 +5,8 @@ from twmap.map.map import Map
 
 import os
 from typing import List
+import boto3
+from botocore.exceptions import NoCredentialsError, PartialCredentialsError
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -130,6 +132,75 @@ class MapFactory:
                     os.makedirs(zoc_save_location)
                 
                 image_specific_tribes_with_legend_zoc.save(os.path.join(zoc_save_location, f"{i}.png"))
+
+    def generate_missing_maps(self, path: str, max_images: int = None, specific_tribes: List[str] = None, specific_players: List[str] = None):
+        """
+        Generate missing maps based on the provided path (S3 bucket or local directory).
+        """
+        # Determine if the path is an S3 bucket or local directory
+        if path.startswith("s3://"):
+            # Handle S3 bucket path
+            existing_maps = self._list_s3_maps(path)
+        else:
+            # Handle local directory path
+            existing_maps = self._list_local_maps(path)
+        
+        # Identify maps that have not been created
+        missing_maps = self._identify_missing_maps(existing_maps)
+        
+        # Create the missing maps
+        self.create_maps(max_images=max_images, specific_tribes=specific_tribes, specific_players=specific_players)
+    
+    def _list_s3_maps(self, s3_path: str) -> List[str]:
+        """
+        List maps that have already been created in the S3 bucket.
+        """
+
+        existing_maps = []
+        try:
+            s3 = boto3.client('s3')
+            bucket_name = s3_path.split('/')[2]
+            prefix = '/'.join(s3_path.split('/')[3:])
+
+            response = s3.list_objects_v2(Bucket=bucket_name, Prefix=prefix)
+            for obj in response.get('Contents', []):
+                if obj['Key'].endswith(".png"):
+                    existing_maps.append(f"s3://{bucket_name}/{obj['Key']}")
+        except (NoCredentialsError, PartialCredentialsError) as e:
+            logging.error(f"Error accessing S3: {e}")
+        
+        return existing_maps
+    
+    def _list_local_maps(self, local_path: str) -> List[str]:
+        """
+        List maps that have already been created in the local directory.
+        """
+        existing_maps = []
+        for root, dirs, files in os.walk(local_path):
+            for file in files:
+                if file.endswith(".png"):
+                    existing_maps.append(os.path.join(root, file))
+        return existing_maps
+    
+    def _identify_missing_maps(self, existing_maps: List[str]) -> List[str]:
+        """
+        Identify maps that have not been created based on the DataLoader.
+        """
+        missing_maps = []
+        for i, village_model in enumerate(self.village_models):
+            map_time = village_model.iloc[0]["datetime"].strftime("%Y%m%d_%H%M%S")
+            player_map_path = os.path.join(self.image_save_location, "players", f"{i}.png")
+            tribe_map_path = os.path.join(self.image_save_location, "tribes", "no_zoc", f"{i}.png")
+            tribe_zoc_map_path = os.path.join(self.image_save_location, "tribes", "zoc", f"{i}.png")
+
+            if player_map_path not in existing_maps:
+                missing_maps.append(player_map_path)
+            if tribe_map_path not in existing_maps:
+                missing_maps.append(tribe_map_path)
+            if tribe_zoc_map_path not in existing_maps:
+                missing_maps.append(tribe_zoc_map_path)
+
+        return missing_maps
 
 if __name__ == "__main__":
     factory = MapFactory("s3://tribalwars-scraped/en144/")

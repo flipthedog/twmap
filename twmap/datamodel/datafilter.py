@@ -25,6 +25,9 @@ class DataFilter:
         """
         if self._past_day_conquers is None:
             data_pull_datetime = self.conquer_df["datetime"]
+            if data_pull_datetime.empty:
+                logging.info("No conquers found in the dataset.")
+                return pd.DataFrame()
             data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y-%m-%d %H:%M:%S")
             data_pull_datetime = data_pull_datetime.astype(int) // 10**9
             data_pull_datetime = data_pull_datetime.iloc[0]
@@ -32,6 +35,7 @@ class DataFilter:
             past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_day]
             if past_day_conquers.empty:
                 logging.info("No conquers found in the past day.")
+                return pd.DataFrame()
             self._past_day_conquers = self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
         return self._past_day_conquers
 
@@ -42,9 +46,15 @@ class DataFilter:
             pd.DataFrame: DataFrame containing conquers from the past day of top 10 players.
         """
         past_day_conquers = self.get_past_day_conquers()
+        if past_day_conquers.empty:
+            logging.info("No conquers found in the past day for top 10 players.")
+            return pd.DataFrame()
         t10_players = self.get_t10_players()
         t10_player_villages = pd.concat([self.filter_villages_player(player_id) for player_id in t10_players["playerid"]], ignore_index=True)
-        return t10_player_villages[t10_player_villages["villageid"].isin(past_day_conquers["villageid"])]
+        result = t10_player_villages[t10_player_villages["villageid"].isin(past_day_conquers["villageid"])]
+        if result.empty:
+            logging.info("No conquers found in the past day for villages of top 10 players.")
+        return result
 
     def get_past_day_t10_conquers_tribes(self):
         """Get conquers from the past day of top 10 tribes. Uses the epoch timestamp to filter. Return filter on village df
@@ -53,10 +63,16 @@ class DataFilter:
             pd.DataFrame: DataFrame containing conquers from the past day of top 10 tribes.
         """
         past_day_conquers = self.get_past_day_conquers()
+        if past_day_conquers.empty:
+            logging.info("No conquers found in the past day for top 10 tribes.")
+            return pd.DataFrame()
         t10_tribes = self.get_t10_tribes()
         t10_tribe_villages = pd.concat([self.filter_villages_tribe(tribeid) for tribeid in t10_tribes["tribeid"]], ignore_index=True)
         t10_tribe_villages = t10_tribe_villages.merge(self.player_df[['playerid', 'tribeid']], on='playerid', how='left')
-        return t10_tribe_villages[t10_tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+        result = t10_tribe_villages[t10_tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+        if result.empty:
+            logging.info("No conquers found in the past day for villages of top 10 tribes.")
+        return result
 
     def get_t10_players(self):
         """Get top 10 players by points and return list of ids

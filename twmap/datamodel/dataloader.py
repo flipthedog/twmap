@@ -1,8 +1,8 @@
 import pandas as pd
 from pandantic import Pandantic
 import boto3 
-
 import os
+
 from io import StringIO
 
 from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
@@ -109,7 +109,8 @@ class DataLoader:
             with open(f"{world_folder}/{file_name}", "w") as f:
                 f.write(file_content)
         
-        logging.info("Total number of files downloaded: ", len(self.village_files) + len(self.player_files) + len(self.tribe_files) + len(self.conquer_files))
+        total_files_downloaded = len(self.village_files) + len(self.player_files) + len(self.tribe_files) + len(self.conquer_files)
+        logging.info(f"Total number of files downloaded: {total_files_downloaded}")
         logging.info("Files downloaded and saved")
     
     def list_local_files(self):
@@ -201,6 +202,26 @@ class DataLoader:
         
         return self.village_models, self.player_models, self.tribe_models, self.conquer_models
     
+    def get_top_10_tribes(self):
+        """Create a list of the top 10 tribes over multiple dataframes
+        """
+        
+        tribe_df = pd.concat(self.tribe_models)
+        
+        top_10_tribes = tribe_df.groupby("name")["points"].max().sort_values(ascending=False).head(10)
+        
+        return top_10_tribes
+    
+    def get_top_10_players(self):
+        """Create a list of the top 10 players over multiple dataframes
+        """
+        
+        player_df = pd.concat(self.player_models)
+        
+        top_10_players = player_df.groupby("name")["points"].max().sort_values(ascending=False).head(10)
+        
+        return top_10_players
+        
 if __name__ == "__main__":
     loader = DataLoader("s3://tribalwars-scraped/en144/", "data/", refresh=False)
     village_models, player_models, tribe_models, conquer_models = loader.load()

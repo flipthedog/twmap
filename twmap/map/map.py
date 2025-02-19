@@ -73,8 +73,8 @@ class Map:
 
         self.show_barbarians = True
 
-        self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
-        self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
+        self.max_x = self.village_df['x_coord'].max() - self.world_origin
+        self.max_y = self.village_df['y_coord'].max() - self.world_origin
         self.max_border = max(self.max_x, self.max_y)
         # self.max_border = 190
         
@@ -385,6 +385,10 @@ class Map:
         else:
             raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
 
+        # If total villages are less than 20, skip drawing
+        if len(village_df) < 20:
+            return self.image
+            
         draw = ImageDraw.Draw(self.image, 'RGBA')
 
         for _, entity in top_entities.iterrows():
@@ -402,6 +406,8 @@ class Map:
                 # Calculate centroid
                 centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
                 centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
+            else:
+                continue
             
             # Draw the name at the centroid
             name = urllib.parse.unquote_plus(entity['name'])
