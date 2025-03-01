@@ -42,7 +42,7 @@ MAX_IMAGES = None
 start_time = datetime.now()
 
 for s3_path in s3_paths:
-    map_factory = MapFactory(s3_path, refresh=True)
+    map_factory = MapFactory(s3_path, refresh=False)
     map_factory.create_top_10_maps(max_images=MAX_IMAGES)
     map_factory = MapFactory(s3_path, refresh=False, custom_color_map=custom_color_map_ids)
     map_factory.create_maps(max_images=MAX_IMAGES, specific_tribes=specific_tribes)

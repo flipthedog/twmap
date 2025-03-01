@@ -12,15 +12,28 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class MapFactory:
     
-    def __init__(self, s3_path: str, save_location: str = "images", refresh: bool = False, custom_color_map: dict = None):
-        self.s3_path = s3_path
-        self.loader = DataLoader(s3_path, "data/", refresh=refresh)
+    def __init__(self, s3_data_path: str, save_location: str = "images", refresh: bool = False, custom_color_map: dict = None, s3_upload_path: str = "s3://tw-timelapse/", local: bool = False):
+        
+        self.s3_data_path = s3_data_path
+        self.loader = DataLoader(s3_data_path, "data/", refresh=refresh)
         
         self.village_models, self.player_models, self.tribe_models, self.conquer_models = self.loader.load()
         
         self.world_id = self.loader.world_id
-        self.image_save_location = save_location + f"/{self.world_id}"
+        self.max_coords = self.loader.get_max_village_coordinates()
+        self.t10_tribes_list = self.loader.get_top_10_tribes()
+        self.t10_players_list = self.loader.get_top_10_players()
         
+        logging.info(f"Completed loading data for world {self.world_id}")
+        logging.info(f"Max coords: {self.max_coords}")
+        logging.info(f"Top 10 tribes: {self.t10_tribes_list}")
+        logging.info(f"Top 10 players: {self.t10_players_list}")
+        
+        if self.local:
+            self.image_save_location = save_location + f"/{self.world_id}"
+        else:
+            self.s3_save_location = s3_upload_path + f"{self.world_id}/"
+            
         self.custom_color_map = custom_color_map
     
     def create_top_10_maps(self, max_images: int = None):
@@ -40,7 +53,7 @@ class MapFactory:
             
             logging.info(f"Creating maps for world {world_id} at time {map_time}")
             
-            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, custom_color_map=self.custom_color_map)
+            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, custom_color_map=self.custom_color_map, max_coords=self.max_coords)
             
             player_save_location = os.path.join(self.image_save_location, "players")
             tribe_save_location = os.path.join(self.image_save_location, "tribes")
@@ -93,7 +106,7 @@ class MapFactory:
             
             logging.info(f"Creating maps for world {world_id} at time {map_time}")
             
-            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, player_list=specific_players, tribe_list=specific_tribes, custom_color_map=self.custom_color_map)
+            map = Map(self.village_models[i], self.player_models[i], self.tribe_models[i], self.conquer_models[i], map_time, world_id, player_list=specific_players, tribe_list=specific_tribes, custom_color_map=self.custom_color_map, max_coords=self.max_coords)
             
             if not os.path.exists(self.image_save_location):
                 os.makedirs(self.image_save_location)
@@ -135,7 +148,7 @@ class MapFactory:
 
     def generate_missing_maps(self, path: str, max_images: int = None, specific_tribes: List[str] = None, specific_players: List[str] = None):
         """
-        Generate missing maps based on the provided path (S3 bucket or local directory).
+        Generate missing maps based on the provided path (S3 bucket).
         """
         # Determine if the path is an S3 bucket or local directory
         if path.startswith("s3://"):

@@ -21,7 +21,7 @@ from scipy.spatial import ConvexHull
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None):
+    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300):
         """Load it with TW data and create a map
 
         Args:
@@ -73,10 +73,7 @@ class Map:
 
         self.show_barbarians = True
 
-        self.max_x = self.village_df['x_coord'].max() - self.world_origin
-        self.max_y = self.village_df['y_coord'].max() - self.world_origin
-        self.max_border = max(self.max_x, self.max_y)
-        # self.max_border = 190
+        self.max_border = max_coords - self.world_origin + 20
         
         self.zoom = 3
 

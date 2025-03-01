@@ -208,7 +208,7 @@ class DataLoader:
         
         tribe_df = pd.concat(self.tribe_models)
         
-        top_10_tribes = tribe_df.groupby("name")["points"].max().sort_values(ascending=False).head(10)
+        top_10_tribes = tribe_df.groupby("name")["tribe_points"].max().sort_values(ascending=False).head(10)
         
         return top_10_tribes
     
@@ -228,7 +228,7 @@ class DataLoader:
         
         village_df = pd.concat(self.village_models)
         
-        max_village_coordinates = village_df.groupby("name")["x", "y"].max()
+        max_village_coordinates = max(village_df["x_coord"].max(), village_df["y_coord"].max())
         
         return max_village_coordinates
     
