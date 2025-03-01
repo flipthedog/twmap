@@ -20,7 +20,8 @@ start_time = datetime.now()
 
 for s3_path in s3_paths:
     map_factory = MapFactory(s3_path, refresh=True)
-    map_factory.create_top_10_maps(max_images=MAX_IMAGES)
+    map_factory.generate_missing_maps()
+
 
 end_time = datetime.now()
 

@@ -149,11 +149,12 @@ class DataLoader:
             
             village_df = pd.read_csv(file_path, sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
             
-            village_schema =  Pandantic(VillageModel)
+            village_schema = Pandantic(VillageModel)
             village_model = village_schema.validate(village_df)
             
             village_model["datetime"] = self.village_files[self.village_files["file_path"] == file_path]["datetime"].iloc[0]
             village_model["world_id"] = self.village_files[self.village_files["file_path"] == file_path]["world_id"].iloc[0]
+            village_model["file_path"] = file_path
             
             self.village_models.append(village_model)
         
@@ -161,11 +162,12 @@ class DataLoader:
             
             player_df = pd.read_csv(file_path, sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
             
-            player_schema =  Pandantic(PlayerModel)
+            player_schema = Pandantic(PlayerModel)
             player_model = player_schema.validate(player_df)
             
             player_model["datetime"] = self.player_files[self.player_files["file_path"] == file_path]["datetime"].iloc[0]
             player_model["world_id"] = self.player_files[self.player_files["file_path"] == file_path]["world_id"].iloc[0]
+            player_model["file_path"] = file_path
             
             self.player_models.append(player_model)
         
@@ -173,11 +175,12 @@ class DataLoader:
             
             tribe_df = pd.read_csv(file_path, sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
             
-            tribe_schema =  Pandantic(TribeModel)
+            tribe_schema = Pandantic(TribeModel)
             tribe_model = tribe_schema.validate(tribe_df)
             
             tribe_model["datetime"] = self.tribe_files[self.tribe_files["file_path"] == file_path]["datetime"].iloc[0]
             tribe_model["world_id"] = self.tribe_files[self.tribe_files["file_path"] == file_path]["world_id"].iloc[0]
+            tribe_model["file_path"] = file_path
             
             self.tribe_models.append(tribe_model)
         
@@ -185,14 +188,15 @@ class DataLoader:
             
             conquer_df = pd.read_csv(file_path, sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
             
-            conquer_schema =  Pandantic(ConquerModel)
+            conquer_schema = Pandantic(ConquerModel)
             conquer_model = conquer_schema.validate(conquer_df)
             
             conquer_model["datetime"] = self.conquer_files[self.conquer_files["file_path"] == file_path]["datetime"].iloc[0]
             conquer_model["world_id"] = self.conquer_files[self.conquer_files["file_path"] == file_path]["world_id"].iloc[0]
+            conquer_model["file_path"] = file_path
             
             self.conquer_models.append(conquer_model)
-                
+        
         logging.info("Data loaded successfully")
 
         logging.info(f"Number of village models: {len(self.village_models)}")
