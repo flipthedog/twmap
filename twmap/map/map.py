@@ -232,7 +232,7 @@ class Map:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
-        draw.rectangle([0, 0, 450, (len(ids) + 1) * self.font_size], fill="#000000")
+        draw.rectangle([0, 0, 550, (len(ids) + 1) * self.font_size], fill="#000000")
 
         if specific:
             draw.text((0, 0), "Tribe Legend", fill=self.tw_color, font=self.font, anchor="lt")

@@ -13,42 +13,32 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 class DataLoader:
 
-    def __init__(self, data_path: str, local_path: str, refresh: bool = False):
-        # TODO: Add future support for loading from cloud
-        self.data_path = data_path
-        self.local_path = local_path
+    def __init__(self, s3_data_path: str, world_id: str):
         
-        # get the world id from the data path
-        self.world_id = self.data_path.split("/")[-2]
-        
-        self.refresh = refresh
-
+        self.world_id = world_id
+                
         self.village_models = []
         self.player_models = []
         self.tribe_models = []
         self.conquer_models = []
 
-        # If s3 path
-        if self.data_path.startswith("s3://"):
-            self.s3_path = self.data_path
-            self.s3_bucket = self.data_path.split("/")[2]
-            self.s3_key = "/".join(self.data_path.split("/")[3:])
-            self.s3_client = boto3.client("s3")
-        else:
-            self.s3_path = None
-
-    def list_s3_files(self):
+        self.s3_client = boto3.client("s3")
+        self.s3_bucket = s3_data_path.split("/")[2]
+        self.s3_key = world_id
+        self.s3_data_path = s3_data_path
         
-        if self.s3_path:
-            response = self.s3_client.list_objects_v2(Bucket=self.s3_bucket, Prefix=self.s3_key)
-            files = [f["Key"] for f in response["Contents"]]
-        else:
-            files = os.listdir(self.data_path)
+        self.t10_tribes_list = []
+        self.t10_players_list = []
+        self.max_coords = 0
         
+    def list_s3_files(self, limiter=5):
+        
+        response = self.s3_client.list_objects_v2(Bucket=self.s3_bucket, Prefix=self.s3_key)
+        files = [f["Key"] for f in response["Contents"]]
+    
         files_df = pd.DataFrame(files, columns=["file_path"])
 
         files_df["datetime"] = files_df["file_path"].apply(lambda x: "_".join(x.split("/")[-1].split("_")[2:4]).replace(".txt", ""))
-        files_df["datetime"] = pd.to_datetime(files_df["datetime"], format="%Y%m%d_%H%M%S")
 
         files_df["file_type"] = files_df["file_path"].apply(lambda x: x.split("/")[-1].split("_")[0])
         files_df["world_id"] = files_df["file_path"].apply(lambda x: x.split("/")[-1].split("_")[1])
@@ -58,6 +48,13 @@ class DataLoader:
         self.player_files = files_df[files_df["file_type"] == "player"]
         self.tribe_files = files_df[files_df["file_type"] == "ally"]
         self.conquer_files = files_df[files_df["file_type"] == "conquer"]
+        
+        # Apply limiter if provided
+        if limiter is not None:
+            self.village_files = self.village_files.head(limiter)
+            self.player_files = self.player_files.head(limiter)
+            self.tribe_files = self.tribe_files.head(limiter)
+            self.conquer_files = self.conquer_files.head(limiter)
 
         return self.village_files, self.player_files, self.tribe_files, self.conquer_files
 
@@ -65,102 +62,85 @@ class DataLoader:
         response = self.s3_client.get_object(Bucket=self.s3_bucket, Key=file_path)
         return response["Body"].read().decode("utf-8")
 
-    def download_and_save(self):
-        """Download the files from S3 and save them locally
+    def load_specific_files(self, ally_path: str, player_path: str, village_path: str, conquer_path: str):
+        """Load specific files from S3 into memory as pandas dataframes
+        Args:
+            ally_path (str): Path to ally file in S3
+            player_path (str): Path to player file in S3  
+            village_path (str): Path to village file in S3
+            conquer_path (str): Path to conquer file in S3
+        Returns:
+            Tuple of (tribe_df, player_df, village_df, conquer_df)
+        """
+        # Load tribe/ally data
+        content = self.retrieve_from_s3(ally_path)
+        tribe_df = pd.read_csv(StringIO(content), sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
+        tribe_schema = Pandantic(TribeModel)
+        tribe_model = tribe_schema.validate(tribe_df)
+        tribe_model["datetime"] = "_".join(ally_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+        tribe_model["world_id"] = ally_path.split("/")[-1].split("_")[1]
+        tribe_model["file_path"] = ally_path
+
+        # Load player data
+        content = self.retrieve_from_s3(player_path)
+        player_df = pd.read_csv(StringIO(content), sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
+        player_schema = Pandantic(PlayerModel)
+        player_model = player_schema.validate(player_df)
+        player_model["datetime"] = "_".join(player_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+        player_model["world_id"] = player_path.split("/")[-1].split("_")[1]
+        player_model["file_path"] = player_path
+
+        # Load village data
+        content = self.retrieve_from_s3(village_path)
+        village_df = pd.read_csv(StringIO(content), sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
+        village_schema = Pandantic(VillageModel)
+        village_model = village_schema.validate(village_df)
+        village_model["datetime"] = "_".join(village_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+        village_model["world_id"] = village_path.split("/")[-1].split("_")[1]
+        village_model["file_path"] = village_path
+
+        # Load conquer data
+        content = self.retrieve_from_s3(conquer_path)
+        conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
+        conquer_schema = Pandantic(ConquerModel)
+        conquer_model = conquer_schema.validate(conquer_df)
+        conquer_model["datetime"] = "_".join(conquer_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+        conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
+        conquer_model["file_path"] = conquer_path
+
+        return tribe_model, player_model, village_model, conquer_model
+    
+    def load_from_s3_to_memory(self):
+        """Load the files from S3 directly into memory as pandas dataframes
         """
         
-        logging.info("Downloading and saving files")
+        logging.info("Loading files from S3 into memory")
         
+        start_time = pd.Timestamp.now()
+         
         self.list_s3_files()
         
+        # Load village files
         for file_path in self.village_files["file_path"]:
             file_content = self.retrieve_from_s3(file_path)
-            file_name = file_path.split("/")[-1]
-            world_id = file_name.split("_")[1]
-            world_folder = os.path.join(self.local_path, world_id)
-            os.makedirs(world_folder, exist_ok=True)
-            with open(f"{world_folder}/{file_name}", "w") as f:
-                f.write(file_content)
-
-        for file_path in self.player_files["file_path"]:
-            file_content = self.retrieve_from_s3(file_path)
-            file_name = file_path.split("/")[-1]
-            world_id = file_name.split("_")[1]
-            world_folder = os.path.join(self.local_path, world_id)
-            os.makedirs(world_folder, exist_ok=True)
-            with open(f"{world_folder}/{file_name}", "w") as f:
-                f.write(file_content)
-        
-        for file_path in self.tribe_files["file_path"]:
-            file_content = self.retrieve_from_s3(file_path)
-            file_name = file_path.split("/")[-1]
-            world_id = file_name.split("_")[1]
-            world_folder = os.path.join(self.local_path, world_id)
-            os.makedirs(world_folder, exist_ok=True)
-            with open(f"{world_folder}/{file_name}", "w") as f:
-                f.write(file_content)
-        
-        for file_path in self.conquer_files["file_path"]:
-            file_content = self.retrieve_from_s3(file_path)
-            file_name = file_path.split("/")[-1]
-            world_id = file_name.split("_")[1]
-            world_folder = os.path.join(self.local_path, world_id)
-            os.makedirs(world_folder, exist_ok=True)
-            with open(f"{world_folder}/{file_name}", "w") as f:
-                f.write(file_content)
-        
-        total_files_downloaded = len(self.village_files) + len(self.player_files) + len(self.tribe_files) + len(self.conquer_files)
-        logging.info(f"Total number of files downloaded: {total_files_downloaded}")
-        logging.info("Files downloaded and saved")
-    
-    def list_local_files(self):
-        
-        files = os.listdir(self.local_path + self.world_id)
-        
-        files_df = pd.DataFrame(files, columns=["file_path"])
-
-        files_df["datetime"] = files_df["file_path"].apply(lambda x: "_".join(x.split("_")[2:4]).replace(".txt", ""))
-        files_df["datetime"] = pd.to_datetime(files_df["datetime"], format="%Y%m%d_%H%M%S")
- 
-        files_df["file_type"] = files_df["file_path"].apply(lambda x: x.split("_")[0])
-        files_df["world_id"] = files_df["file_path"].apply(lambda x: x.split("_")[1])
-
-        files_df["file_path"] = files_df["file_path"].apply(lambda x: self.local_path + self.world_id + "/" + x)
-        
-        # separate the dataframes by file type
-        self.village_files = files_df[files_df["file_type"] == "village"]
-        self.player_files = files_df[files_df["file_type"] == "player"]
-        self.tribe_files = files_df[files_df["file_type"] == "ally"]
-        self.conquer_files = files_df[files_df["file_type"] == "conquer"]
-
-        return self.village_files, self.player_files, self.tribe_files, self.conquer_files
-    
-    def load(self):
-        """Load the data from the local path, or download from S3 if refresh is True"""
-        
-        # TODO: Add functionality to load a specific timeframe
-        
-        if self.refresh:
-            self.download_and_save()
-        
-        self.village_files, self.player_files, self.tribe_files, self.conquer_files = self.list_local_files()
-                
-        for file_path in self.village_files["file_path"]:
-            
-            village_df = pd.read_csv(file_path, sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
+            village_df = pd.read_csv(StringIO(file_content), sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
             
             village_schema = Pandantic(VillageModel)
             village_model = village_schema.validate(village_df)
             
-            village_model["datetime"] = self.village_files[self.village_files["file_path"] == file_path]["datetime"].iloc[0]
-            village_model["world_id"] = self.village_files[self.village_files["file_path"] == file_path]["world_id"].iloc[0]
+            datetime = self.village_files[self.village_files["file_path"] == file_path]["datetime"].iloc[0]
+            world_id = self.village_files[self.village_files["file_path"] == file_path]["world_id"].iloc[0]
+            
+            village_model["datetime"] = datetime
+            village_model["world_id"] = world_id
             village_model["file_path"] = file_path
             
             self.village_models.append(village_model)
-        
+
+        # Load player files
         for file_path in self.player_files["file_path"]:
-            
-            player_df = pd.read_csv(file_path, sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
+            file_content = self.retrieve_from_s3(file_path)
+            player_df = pd.read_csv(StringIO(file_content), sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
             
             player_schema = Pandantic(PlayerModel)
             player_model = player_schema.validate(player_df)
@@ -171,9 +151,10 @@ class DataLoader:
             
             self.player_models.append(player_model)
         
+        # Load tribe files
         for file_path in self.tribe_files["file_path"]:
-            
-            tribe_df = pd.read_csv(file_path, sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
+            file_content = self.retrieve_from_s3(file_path)
+            tribe_df = pd.read_csv(StringIO(file_content), sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
             
             tribe_schema = Pandantic(TribeModel)
             tribe_model = tribe_schema.validate(tribe_df)
@@ -184,9 +165,10 @@ class DataLoader:
             
             self.tribe_models.append(tribe_model)
         
+        # Load conquer files
         for file_path in self.conquer_files["file_path"]:
-            
-            conquer_df = pd.read_csv(file_path, sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
+            file_content = self.retrieve_from_s3(file_path)
+            conquer_df = pd.read_csv(StringIO(file_content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
             
             conquer_schema = Pandantic(ConquerModel)
             conquer_model = conquer_schema.validate(conquer_df)
@@ -197,12 +179,19 @@ class DataLoader:
             
             self.conquer_models.append(conquer_model)
         
-        logging.info("Data loaded successfully")
-
+        total_files_loaded = len(self.village_files) + len(self.player_files) + len(self.tribe_files) + len(self.conquer_files)
+        logging.info(f"Total number of files loaded: {total_files_loaded}")
         logging.info(f"Number of village models: {len(self.village_models)}")
         logging.info(f"Number of player models: {len(self.player_models)}")
         logging.info(f"Number of tribe models: {len(self.tribe_models)}")
         logging.info(f"Number of conquer models: {len(self.conquer_models)}")
+        end_time = pd.Timestamp.now()   
+        logging.info(f"Time taken to load files: {end_time - start_time}")
+        logging.info("Files loaded into memory")
+        
+        self.t10_players_list = self.get_top_10_players()
+        self.t10_tribes_list = self.get_top_10_tribes()
+        self.max_coords = self.get_max_village_coordinates()
         
         return self.village_models, self.player_models, self.tribe_models, self.conquer_models
     
@@ -237,5 +226,6 @@ class DataLoader:
         return max_village_coordinates
     
 if __name__ == "__main__":
-    loader = DataLoader("s3://tribalwars-scraped/en144/", "data/", refresh=False)
-    village_models, player_models, tribe_models, conquer_models = loader.load()
+    loader = DataLoader("s3://tribalwars-scraped/", "en142")
+
+    print(loader.load_from_s3_to_memory())
