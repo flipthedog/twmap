@@ -12,14 +12,14 @@ import pandas as pd
 import io
 import datetime
 import concurrent.futures
-
+import tqdm
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
 class MapFactory:
     
-    def __init__(self, s3_data_path: str, custom_color_map: dict = None, s3_map_path: str = "s3://tw-timelapse", local: bool = False):
+    def __init__(self, s3_data_path: str, custom_color_map: dict = None, s3_map_path: str = "s3://tw-timelapse", local: bool = False, max_coords: int = 730):
         
         self.local = local
         self.s3_data_path = s3_data_path
@@ -32,7 +32,7 @@ class MapFactory:
         self.worlds = self.get_worlds()
             
         self.custom_color_map = custom_color_map
-        self.max_coords = 730
+        self.max_coords = max_coords
     
     def create_top_10_map(self, village_model: pd.DataFrame, player_model: pd.DataFrame, tribe_model: pd.DataFrame,  conquer_model: pd.DataFrame, world_id: str):
         # Convert the timestamp string from YYYYMMDD_HHMMSS format to datetime
@@ -76,20 +76,23 @@ class MapFactory:
         
         with concurrent.futures.ThreadPoolExecutor() as executor:
             futures = []
-            for _, row in missing_maps.iterrows():
-                ally_file = row['ally']
-                player_file = row['player']
-                village_file = row['village']
-                conquer_file = row['conquer']
+            with tqdm.tqdm(total=len(missing_maps), desc="Generating maps") as pbar:
+                for _, row in missing_maps.iterrows():
+                    ally_file = row['ally']
+                    player_file = row['player']
+                    village_file = row['village']
+                    conquer_file = row['conquer']
+                    
+                    datetimestamp = row['datetimestamp']
+                    
+                    # Submit the map generation task to the executor
+                    future = executor.submit(self._generate_map, world_id, ally_file, player_file, village_file, conquer_file, datetimestamp)
+                    future.add_done_callback(lambda p: pbar.update())
+                    futures.append(future)
                 
-                datetimestamp = row['datetimestamp']
-                
-                # Submit the map generation task to the executor
-                futures.append(executor.submit(self._generate_map, world_id, ally_file, player_file, village_file, conquer_file, datetimestamp))
-            
-            # Wait for all futures to complete
-            for future in concurrent.futures.as_completed(futures):
-                future.result()
+                # Wait for all futures to complete
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
     
     def _generate_map(self, world_id: str, ally_file: str, player_file: str, village_file: str, conquer_file: str, datetimestamp: str):
         """Helper function to generate a single map"""
@@ -265,6 +268,12 @@ class MapFactory:
             return []
 
 if __name__ == "__main__":
-    factory = MapFactory("s3://tribalwars-scraped/")
-    factory.generate_missing_maps("en142")
+    factory = MapFactory("s3://tribalwars-scraped/", max_coords=730)
+    # factory.generate_missing_maps("en142", regenerate_all=False)
+    factory.generate_missing_maps("en143", regenerate_all=False)
+    factory.generate_missing_maps("en144", regenerate_all=False)
+    factory.generate_missing_maps("en145", regenerate_all=False)
+    factory.generate_missing_maps("en146", regenerate_all=False) 
+    factory.generate_missing_maps("enc1", regenerate_all=False)
+    factory.generate_missing_maps("enc2", regenerate_all=False)
     
