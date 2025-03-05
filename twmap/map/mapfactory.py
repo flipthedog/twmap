@@ -62,9 +62,11 @@ class MapFactory:
             "top_tribes_zoc": image_top_tribes_with_legend_zoc
         }
     
-    def generate_missing_maps(self, world_id: str, regenerate_all: bool = False) -> None:
+    def generate_missing_maps(self, world_id: str, regenerate_all: bool = False, max_coords: int = 730) -> None:
         """Generate missing maps for a given world_id
         """
+        
+        self.max_coords = max_coords
         
         logging.info(f"Generating missing maps for world {world_id}")
         
@@ -269,11 +271,11 @@ class MapFactory:
 
 if __name__ == "__main__":
     factory = MapFactory("s3://tribalwars-scraped/", max_coords=730)
-    # factory.generate_missing_maps("en142", regenerate_all=False)
-    factory.generate_missing_maps("en143", regenerate_all=False)
-    factory.generate_missing_maps("en144", regenerate_all=False)
-    factory.generate_missing_maps("en145", regenerate_all=False)
-    factory.generate_missing_maps("en146", regenerate_all=False) 
-    factory.generate_missing_maps("enc1", regenerate_all=False)
-    factory.generate_missing_maps("enc2", regenerate_all=False)
+    factory.generate_missing_maps("en142", regenerate_all=False, max_coords=730)
+    factory.generate_missing_maps("en143", regenerate_all=False, max_coords=700)
+    factory.generate_missing_maps("en144", regenerate_all=False, max_coords=680)
+    factory.generate_missing_maps("en145", regenerate_all=False, max_coords=650)
+    factory.generate_missing_maps("en146", regenerate_all=False, max_coords=650) 
+    factory.generate_missing_maps("enc1", regenerate_all=False, max_coords=650)
+    factory.generate_missing_maps("enc2", regenerate_all=False, max_coords=650)
     
