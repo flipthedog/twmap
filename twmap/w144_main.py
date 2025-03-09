@@ -5,9 +5,7 @@ from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-s3_paths = [
-    "s3://tribalwars-scraped/en144/",
-]
+factory = MapFactory("s3://tribalwars-scraped/", max_coords=730)
 
 specific_tribes = [
     "Sock%7E2",
@@ -25,16 +23,16 @@ specific_tribes = [
 
 custom_color_map_ids = {
     "350": "#0072ff",  # Sock%7E2
-    "98": "#00aaf2",   # Socks%21
+    "98": "#0072ff",   # Socks%21
     "54": "#ff93ac",   # SPS
-    "106": "#fc3468",  # SPS-2
-    "65": "#ff084a",   # SPS-3
+    "106": "#ff93ac",  # SPS-2
+    "65": "#ff93ac",   # SPS-3
     "341": "#ff4800",  # Hounds
-    "89": "#f28e41",   # DOGS
+    "89": "#ff4800",   # DOGS
     "242": "#039438",  # J%C3%A4ger
     "404": "#8d03ff",  # Taste
     "373": "#f5e902",  # %3DBOW%3D
-    "370": "#e0faaf",  # TF
+    "370": "#ff3222",  # TF
 }
 
 MAX_IMAGES = None

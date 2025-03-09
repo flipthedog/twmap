@@ -2,6 +2,8 @@
 
 Creating pretty maps for Tribal Wars with Python. Uses the TW API to retrieve world village, player and tribe files. 
 
+# Site
+The content is available on [https://www.twtimelapse.com/](https://www.twtimelapse.com/)
 
 # Results
 

@@ -96,7 +96,7 @@ class MapFactory:
                 for future in concurrent.futures.as_completed(futures):
                     future.result()
     
-    def _generate_map(self, world_id: str, ally_file: str, player_file: str, village_file: str, conquer_file: str, datetimestamp: str):
+    def _generate_map(self, world_id: str, ally_file: str, player_file: str, village_file: str, conquer_file: str, datetimestamp: str, custom_s3_path: str = None):
         """Helper function to generate a single map"""
         logging.info(f"Generating map for world {world_id} at time {datetimestamp}")
         
@@ -114,6 +114,9 @@ class MapFactory:
             
             folder = map_name
             s3_path = f"{world_id}/{folder}/{world_id}_{map_name}_{datetimestamp}.png"
+            if custom_s3_path:
+                s3_path = f"{custom_s3_path}/{world_id}_{map_name}_{datetimestamp}.png"
+            
             logging.info(f"Uploading {s3_path} to S3.")
             self.s3_client.upload_fileobj(image_bytes, self.s3_map_bucket, s3_path)
             logging.info(f"Uploaded {s3_path} to S3.")
