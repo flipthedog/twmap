@@ -190,10 +190,8 @@ class MapFactory:
             prefix = os.path.join(prefix, world_id)
 
         try:
-            response = self.s3_client.list_objects_v2(Bucket=self.s3_data_bucket, Prefix=prefix)
-            
-            if 'Contents' not in response:
-                return []
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            page_iterator = paginator.paginate(Bucket=self.s3_data_bucket, Prefix=prefix)
             
             # Initialize dictionaries to store file paths by type
             file_categories = {
@@ -203,23 +201,30 @@ class MapFactory:
                 'conquer': []
             }
             
-            # Categorize files based on prefix
-            for item in response['Contents']:
-                file_path = item['Key']
-                file_name = file_path.split('/')[-1]
-                
-                if file_name.startswith("ally_"):
-                    file_categories['ally'].append(file_path)
-                elif file_name.startswith("player_"):
-                    file_categories['player'].append(file_path)
-                elif file_name.startswith("village_"):
-                    file_categories['village'].append(file_path)
-                elif file_name.startswith("conquer_"):
-                    file_categories['conquer'].append(file_path)
-                else:
-                    # this will contain other file types in the future
+            for page in page_iterator:
+                if 'Contents' not in page:
                     continue
                 
+                # Categorize files based on prefix
+                for item in page['Contents']:
+                    file_path = item['Key']
+                    file_name = file_path.split('/')[-1]
+                    
+                    if file_name.startswith("ally_"):
+                        file_categories['ally'].append(file_path)
+                    elif file_name.startswith("player_"):
+                        file_categories['player'].append(file_path)
+                    elif file_name.startswith("village_"):
+                        file_categories['village'].append(file_path)
+                    elif file_name.startswith("conquer_"):
+                        file_categories['conquer'].append(file_path)
+                    else:
+                        # this will contain other file types in the future
+                        continue
+                
+            if not any(file_categories.values()):
+                return pd.DataFrame()
+            
             # Find the maximum length of any file type list
             max_length = max(len(files) for files in file_categories.values())
             

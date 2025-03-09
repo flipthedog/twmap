@@ -21,9 +21,7 @@ process_world() {
     mkdir -p ${BASE_DIR}/tribes/zoc
     mkdir -p ${BASE_DIR}/tribes/no_zoc
     mkdir -p ${OUTPUT_DIR}
-    mkdir -p ${GIF_DIR}/players
-    mkdir -p ${GIF_DIR}/tribes/zoc
-    mkdir -p ${GIF_DIR}/tribes/no_zoc
+    mkdir -p ${GIF_DIR}
 
     # Count files to be downloaded
     echo "Counting files to be downloaded from S3..."
@@ -100,7 +98,7 @@ process_world() {
         ffmpeg -thread_queue_size 4096 -framerate 5 -i ${BASE_DIR}/players/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -y -loglevel error
 
         # Convert MP4 to GIF for players
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/players/${WORLD_ID}_player_output.gif -loglevel error
+        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
     fi
 
     # Tribes with zones of control
@@ -109,7 +107,7 @@ process_world() {
         ffmpeg -thread_queue_size 4096 -framerate 5 -i ${BASE_DIR}/tribes/zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_tribe_zoc_output.mp4 -y -loglevel error
 
         # Convert MP4 to GIF for tribes with zones of control
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/tribes/zoc/${WORLD_ID}_tribe_zoc_output.gif -loglevel error
+        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_tribe_zoc_output.gif -loglevel error
     fi
 
     # Tribes without zones of control
@@ -118,7 +116,7 @@ process_world() {
         ffmpeg -thread_queue_size 4096 -framerate 5 -i ${BASE_DIR}/tribes/no_zoc/%d.png -crf 16 -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=5',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_tribe_no_zoc_output.mp4 -y -loglevel error
 
         # Convert MP4 to GIF for tribes without zones of control
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_no_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/tribes/no_zoc/${WORLD_ID}_tribe_no_zoc_output.gif -loglevel error
+        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_no_zoc_output.mp4 -vf "fps=5,scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_tribe_no_zoc_output.gif -loglevel error
     fi
 
     # Calculate elapsed time
@@ -216,25 +214,3 @@ fi
 
 echo "MP4 files are in the 'outputs/' directory"
 echo "GIF files are in the 'gifs/' directory"
-
-# Optionally upload the results back to S3
-read -p "Do you want to upload the results back to S3? (y/n): " UPLOAD
-if [ "$UPLOAD" == "y" ]; then
-    for WORLD_ID in "${SUCCESSFUL_WORLDS[@]}"; do
-        echo "Uploading files for ${WORLD_ID} to S3..."
-        
-        # Upload videos
-        if [ -d "outputs/${WORLD_ID}" ] && [ -n "$(ls -A outputs/${WORLD_ID} 2>/dev/null)" ]; then
-            echo "Uploading MP4 files to S3..."
-            aws s3 sync outputs/${WORLD_ID} s3://tw-timelapse/${WORLD_ID}/videos/ --quiet
-        fi
-        
-        # Upload GIFs
-        if [ -d "gifs/${WORLD_ID}" ] && [ -n "$(find gifs/${WORLD_ID} -type f 2>/dev/null)" ]; then
-            echo "Uploading GIF files to S3..."
-            aws s3 sync gifs/${WORLD_ID} s3://tw-timelapse/${WORLD_ID}/gifs/ --quiet
-        fi
-    done
-    
-    echo "Upload complete."
-fi
