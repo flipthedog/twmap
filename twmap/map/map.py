@@ -61,8 +61,8 @@ class Map:
         if tribe_list:
             logging.info(f"Tribe list: {tribe_list}")
             self.tribe_list = tribe_list
-            self.tribe_village = self.data_filter.filter_villages_by_tribe_tags(tribe_list)
-            self.tribe_conquer = self.data_filter.get_past_day_conquers_by_tribe_tags(tribe_list)
+            self.tribe_village = self.data_filter.filter_villages_by_tribe_ids(tribe_list)
+            self.tribe_conquer = self.data_filter.get_past_day_conquers_by_tribe_ids(tribe_list)
                
         self.world_origin = 500
         self.world_height = 1000
@@ -223,8 +223,8 @@ class Map:
                 names = self.t10_players['name'].to_list()
         elif top_type == "tribes":
             if specific:
-                ids = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)]['tribeid'].tolist()
-                names = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)]['name'].tolist()
+                ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
+                names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
             else:
                 ids = self.t10_tribes['tribeid'].to_list()
                 names = self.t10_tribes['name'].to_list()
@@ -236,12 +236,17 @@ class Map:
 
         if specific:
             draw.text((0, 0), "Tribe Legend", fill=self.tw_color, font=self.font, anchor="lt")
+            
+            for i in range(0, len(ids)):
+                id = ids[i]
+                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(id))
         else:
             draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
-        for i in range(0, len(ids)):
-            draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(ids[i]))
+            for i in range(0, len(ids)):
+                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(ids[i]))
 
         return image
 

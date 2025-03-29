@@ -204,6 +204,39 @@ class DataFilter:
         villages = self.village_df[self.village_df["playerid"].isin(players_in_tribes["playerid"])]
         return villages.merge(players_in_tribes[['playerid', 'tribeid']], on='playerid', how='left')
     
+    def filter_villages_by_tribe_ids(self, tribe_ids: list):
+        """Filter villages by list of tribe ids.
+
+        Args:
+            tribe_ids (list): List of tribe ids.
+
+        Returns:
+            pd.DataFrame: DataFrame containing villages of the specified tribe ids with tribeid included.
+        """
+        tribe_df = self.filter_tribes(tribe_ids)
+        players_in_tribes = self.player_df[self.player_df["tribeid"].isin(tribe_df["tribeid"])]
+        villages = self.village_df[self.village_df["playerid"].isin(players_in_tribes["playerid"])]
+        return villages.merge(players_in_tribes[['playerid', 'tribeid']], on='playerid', how='left')
+    
+    def get_past_day_conquers_by_tribe_ids(self, tribe_ids: list):
+        """Get conquers from the past day of tribes specified by ids. Uses the epoch timestamp to filter. Return filter on village df
+
+        Args:
+            tribe_ids (list): List of tribe ids.
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past day of tribes specified by ids.
+        """
+        past_day_conquers = self.get_past_day_conquers()
+        if past_day_conquers.empty:
+            logging.info("No conquers found in the past day for the specified tribe ids.")
+            return pd.DataFrame()
+        tribe_villages = self.filter_villages_by_tribe_ids(tribe_ids)
+        result = tribe_villages[tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+        if result.empty:
+            logging.info("No conquers found in the past day for villages of the specified tribe ids.")
+        return result
+    
     def get_past_day_conquers_by_tribe_tags(self, tribe_tags: list):
         """Get conquers from the past day of tribes specified by tags. Uses the epoch timestamp to filter. Return filter on village df
 
@@ -213,9 +246,15 @@ class DataFilter:
         Returns:
             pd.DataFrame: DataFrame containing conquers from the past day of tribes specified by tags.
         """
-        tribe_villages = self.filter_villages_by_tribe_tags(tribe_tags)
         past_day_conquers = self.get_past_day_conquers()
-        return tribe_villages[tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+        if past_day_conquers.empty:
+            logging.info("No conquers found in the past day for the specified tribe tags.")
+            return pd.DataFrame()
+        tribe_villages = self.filter_villages_by_tribe_tags(tribe_tags)
+        result = tribe_villages[tribe_villages["villageid"].isin(past_day_conquers["villageid"])]
+        if result.empty:
+            logging.info("No conquers found in the past day for villages of the specified tribe tags.")
+        return result
     
     def get_past_day_conquers_by_player_names(self, player_names: list):
         """Get conquers from the past day of players specified by names. Uses the epoch timestamp to filter. Return filter on village df

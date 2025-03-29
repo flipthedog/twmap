@@ -62,6 +62,139 @@ class MapFactory:
             "top_tribes_zoc": image_top_tribes_with_legend_zoc
         }
     
+    def generate_specific_maps(self, world_id: str, specific_tribes: List[str], regenerate_all: bool = False, max_coords: int = 730, custom_folder: str = None) -> None:
+        """Generate maps highlighting specific tribes for a given world_id
+        
+        Parameters:
+        -----------
+        world_id: ID of the world to generate maps for
+        specific_tribes: List of tribe tags/names to highlight
+        regenerate_all: Whether to regenerate all maps or only missing ones
+        max_coords: Maximum coordinates for the map
+        custom_folder: Optional custom folder name in S3 to store maps
+        """
+        
+        self.max_coords = max_coords
+        print(f"Generating specific tribe maps for world {world_id} with tribes {specific_tribes}")
+        logging.info(f"Generating specific tribe maps for {len(specific_tribes)} tribes in world {world_id}")
+        
+        # Get all available data timestamps for this world
+        s3_data = self._get_data_timestamps(world_id)
+        
+        logging.info(f"Found {len(s3_data)} data timestamps for world {world_id}")
+        logging.info(f"Example, {len(s3_data)}: {s3_data.iloc[0]}")
+        
+        if s3_data.empty:
+            logging.info(f"No data found for world {world_id}")
+            return
+        
+        # Skip filtering and proceed to generate maps for all timestamps
+        logging.info(f"Generating {len(s3_data)} specific tribe maps for world {world_id}")
+        # Process each timestamp with ThreadPoolExecutor
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            futures = []
+            with tqdm.tqdm(total=len(s3_data), desc="Generating specific tribe maps") as pbar:
+                for _, row in s3_data.iterrows():
+                    ally_file = row['ally']
+                    player_file = row['player']
+                    village_file = row['village']
+                    conquer_file = row['conquer']
+                    datetimestamp = row['datetimestamp']
+                    
+                    # Submit the map generation task to the executor
+                    future = executor.submit(
+                        self._generate_specific_map, 
+                        world_id, 
+                        ally_file, 
+                        player_file, 
+                        village_file, 
+                        conquer_file, 
+                        datetimestamp, 
+                        specific_tribes,
+                        custom_folder
+                    )
+                    future.add_done_callback(lambda p: pbar.update())
+                    futures.append(future)
+                
+                # Wait for all futures to complete
+                for future in concurrent.futures.as_completed(futures):
+                    future.result()
+        
+        logging.info(f"Completed generating specific tribe maps for world {world_id}")
+
+    def _generate_specific_map(self, world_id: str, ally_file: str, player_file: str, village_file: str, 
+                            conquer_file: str, datetimestamp: str, specific_tribes: List[str], custom_folder: str = None):
+        """Helper function to generate a single specific tribe map"""
+        logging.info(f"Generating specific tribe map for world {world_id} at time {datetimestamp}")
+        
+        # Load data
+        data_loader = DataLoader(self.s3_data_path, world_id)
+        tribe_df, player_df, village_df, conquer_df = data_loader.load_specific_files(ally_file, player_file, village_file, conquer_file)
+        
+        # Create specific tribe maps
+        maps = self.create_specific_map(village_df, player_df, tribe_df, conquer_df, world_id, specific_tribes)
+        
+        # Define S3 folder structure
+        folder_prefix = "specific_tribes"
+        if custom_folder:
+            folder_prefix = custom_folder
+        
+        # Upload each map to S3
+        for map_name, image in maps.items():
+            image_bytes = io.BytesIO()
+            image.save(image_bytes, format='PNG')
+            image_bytes.seek(0)
+            
+            s3_path = f"{world_id}/{folder_prefix}/{map_name}/{world_id}_{map_name}_{datetimestamp}.png"
+            
+            logging.info(f"Uploading {s3_path} to S3.")
+            self.s3_client.upload_fileobj(image_bytes, self.s3_map_bucket, s3_path)
+            logging.info(f"Uploaded {s3_path} to S3.")
+    
+    def create_specific_map(self, village_model: pd.DataFrame, player_model: pd.DataFrame, tribe_model: pd.DataFrame, conquer_model: pd.DataFrame, world_id: str, specific_tribes: List[int]):
+        """
+        Create maps highlighting specific tribes with custom colors
+        
+        Parameters:
+        -----------
+        village_model: DataFrame containing village data
+        player_model: DataFrame containing player data
+        tribe_model: DataFrame containing tribe data
+        conquer_model: DataFrame containing conquer data
+        world_id: ID of the world
+        specific_tribes: List of tribe tags/names to highlight
+        
+        Returns:
+        --------
+        Dict containing the generated images
+        """
+        # Convert the timestamp string from YYYYMMDD_HHMMSS format to datetime
+        map_time = pd.to_datetime(village_model["datetime"][0], format="%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+        world_id = village_model.iloc[0]["world_id"]
+        
+        logging.info(f"Creating specific tribe maps for world {world_id} at time {map_time}")
+                
+        # Create Map instance with custom color map
+        map = Map(village_model, player_model, tribe_model, conquer_model, map_time, world_id, 
+                custom_color_map=self.custom_color_map, max_coords=self.max_coords, tribe_list=specific_tribes)
+        
+        # Create maps with specific tribes
+        logging.info(f"Creating map highlighting specific tribes for world {world_id}")
+        
+        # Draw tribes map with only specific tribes highlighted
+        image_specific_tribes = map.draw_specific_tribes(center_text=True, zones_of_control=False).copy()
+        image_specific_tribes_with_legend = map.draw_legend("tribes", image_specific_tribes, specific=True)
+        
+        # Create zone of control map for specific tribes
+        image_specific_tribes_zoc = map.draw_specific_tribes(center_text=True, zones_of_control=True).copy()
+        image_specific_tribes_with_legend_zoc = map.draw_legend("tribes", image_specific_tribes_zoc, specific=True)
+        
+
+        return {
+            "specific_tribes_no_zoc": image_specific_tribes_with_legend,
+            "specific_tribes_zoc": image_specific_tribes_with_legend_zoc,
+        }
+    
     def generate_missing_maps(self, world_id: str, regenerate_all: bool = False, max_coords: int = 730) -> None:
         """Generate missing maps for a given world_id
         """
