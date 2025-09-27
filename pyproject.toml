@@ -1,22 +1,16 @@
-[tool.poetry]
+[project]
 name = "twmap"
 version = "0.1.0"
-description = ""
-authors = ["Floris"]
+description = "Add your description here"
 readme = "README.md"
-
-[tool.poetry.dependencies]
-python = "^3.10"
-pandas = "^2.2.3"
-pydantic = "^2.10.6"
-pillow = "^11.1.0"
-pandantic = "^1.0.0"
-requests = "^2.32.3"
-boto3 = "^1.36.15"
-scikit-learn = "^1.6.1"
-tqdm = "^4.67.1"
-
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires-python = "==3.10.13"
+dependencies = [
+    "boto3>=1.40.30",
+    "pandantic>=1.0.1",
+    "pandas>=2.3.2",
+    "pillow>=11.3.0",
+    "pydantic>=2.11.9",
+    "requests>=2.32.5",
+    "scikit-learn>=1.7.2",
+    "tqdm>=4.67.1",
+]
