@@ -1,6 +1,6 @@
 import logging 
 
-from twmap.map.mapfactory import MapFactory
+from twmap.mapfactory import MapFactory
 from datetime import datetime
 import random
 

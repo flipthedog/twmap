@@ -1,14 +1,20 @@
-from twmap.datamodel.datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
+from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
 import pandas as pd
 import logging
 
+
 class DataFilter:
+    """Class to filter villages, players, tribes, and conquers based on various criteria for a single snapshot.
+    
+    """
 
     def __init__(self, village_df: pd.DataFrame, player_df: pd.DataFrame, tribe_df: pd.DataFrame, conquer_df: pd.DataFrame):
         self.village_df = village_df
         self.player_df = player_df
         self.tribe_df = tribe_df
         self.conquer_df = conquer_df
+        self.printed_timestamp = pd.to_datetime(village_df["datetime"][0], format="%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
+        self.world_id = village_df.iloc[0]["world_id"]
 
         self.joined_player_villages = pd.merge(self.village_df, self.player_df, on="playerid")
 

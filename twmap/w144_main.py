@@ -1,6 +1,6 @@
 import logging 
 
-from twmap.map.mapfactory import MapFactory
+from twmap.mapfactory import MapFactory
 from datetime import datetime
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')

@@ -4,8 +4,7 @@ import pandas as pd
 from pandas import DataFrame
 from sklearn.cluster import KMeans 
 
-from twmap.datamodel.datafilter import DataFilter
-from twmap.datamodel.datamodel import VillageModel
+from twmap.snapshot.datafilter import DataFilter
 from twmap.map.colors import ColorManager
 
 from typing import List
@@ -21,7 +20,7 @@ from scipy.spatial import ConvexHull
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300):
+    def __init__(self, data_filter: DataFilter, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300):
         """Load it with TW data and create a map
 
         Args:
@@ -30,20 +29,19 @@ class Map:
             tribe_df (DataFrame): DataFrame containing tribe data
             conquer_df (DataFrame): DataFrame containing conquer data
         """
+        self.data_filter = data_filter
 
-        self.village_df = village_df
-        self.player_df = player_df
-        self.tribe_df = tribe_df
-        self.conquer_df = conquer_df
+        self.village_df = data_filter.village_df
+        self.player_df = data_filter.player_df
+        self.tribe_df = data_filter.tribe_df
+        self.conquer_df = data_filter.conquer_df
         
-        self.printed_datetime = printed_datetime
-        self.printed_world = printed_world
+        self.printed_datetime = data_filter.printed_timestamp
+        self.printed_world = data_filter.world_id
         
         if self.printed_datetime is None:
             self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             # TODO: read this from the file
-
-        self.data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
 
         self.t10_players_v = self.data_filter.get_t10_player_villages()
         self.t10_tribes_v = self.data_filter.get_t10_tribe_villages()

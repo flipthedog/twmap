@@ -1,14 +1,120 @@
-import random
-import logging
+from typing import List 
 
 class ColorManager:
 
     def __init__(self):
         
         self.color_map = {}
+        self.colors = []
 
-        self.colors =  [
+        # Original colors
+        self.default_colors =  [
             '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
+        ]
+        
+        # Option 1: Distinct rainbow colors (avoiding greens and browns)
+        self.rainbow_colors = [
+            '#FF0000',  # Pure Red
+            '#FF6600',  # Orange Red
+            '#FF9900',  # Orange
+            '#FFCC00',  # Golden Yellow
+            '#FFFF00',  # Pure Yellow
+            '#00FFFF',  # Cyan
+            '#0099FF',  # Sky Blue
+            '#0033FF',  # Blue
+            '#6600FF',  # Purple
+            '#9900FF',  # Violet
+            '#FF00FF',  # Magenta
+            '#FF0080'   # Pink
+        ]
+        
+        # Option 2: 10-step gradient colors (Blue to Red spectrum)
+        self.gradient_colors_10 = [
+            '#0066FF',  # Deep Blue (1)
+            '#0080FF',  # Blue (2)
+            '#00AAFF',  # Light Blue (3)
+            '#00CCFF',  # Cyan Blue (4)
+            '#00FFCC',  # Cyan (5)
+            '#FFCC00',  # Yellow (6)
+            '#FF9900',  # Orange (7)
+            '#FF6600',  # Red Orange (8)
+            '#FF3300',  # Red (9)
+            '#FF0000'   # Pure Red (10)
+        ]
+        
+        # Option 3: High-contrast performance gradient (Purple to Gold)
+        # Best performers get warm colors (gold/orange), worst get cool colors (purple/blue)
+        self.performance_gradient = [
+            '#FF8F00',  # Pure Gold (top - best performance)
+            '#FFB74D',  # Light Orange
+            '#FFD54F',  # Golden Yellow
+            '#FFF59D',  # Light Yellow
+            '#E1BEE7',  # Pale Purple
+            '#AB47BC',  # Bright Purple
+            '#8E24AA',  # Light Purple
+            '#6A1B9A',  # Medium Purple
+            '#4A148C',  # Dark Purple
+            '#2D1B69'   # Deep Purple (bottom - worst performance)
+        ]
+        
+        # Option 4: Traffic light inspired (Red to Green via Yellow)
+        # Intuitive: Red = bad/bottom, Yellow = middle, Green = good/top
+        self.traffic_gradient = [
+            '#B71C1C',  # Dark Red (bottom)
+            '#D32F2F',  # Red
+            '#F44336',  # Light Red
+            '#FF5722',  # Red Orange
+            '#FF9800',  # Orange
+            '#FFC107',  # Amber/Yellow
+            '#FFEB3B',  # Yellow
+            '#8BC34A',  # Light Green
+            '#4CAF50',  # Green
+            '#2E7D32'   # Dark Green (top)
+        ]
+        
+        # Option 5: Flipped blue intensity with high distinction
+        # Top performers get intense dark blue, bottom gets pale blue
+        self.blue_intensity = [
+            '#E8F4FD',  # Very Pale Blue (bottom - worst performance)
+            '#C3E2FC',  # Pale Blue
+            '#9BCBF7',  # Light Blue
+            '#6FB3F0',  # Medium Light Blue
+            '#4A9AE7',  # Medium Blue
+            '#2E7FDB',  # Darker Blue
+            '#1E63CC',  # Dark Blue
+            '#164A9B',  # Very Dark Blue
+            '#0F3469',  # Deep Blue
+            '#08203F'   # Intense Dark Blue (top - best performance)
+        ]
+        
+        # Option 6: Thermal/Heat map (Black to White via Red/Orange/Yellow)
+        # Like a heat signature - coldest (black) to hottest (white)
+        self.thermal_gradient = [
+            '#000000',  # Black (coldest/bottom)
+            '#1A0033',  # Very Dark Purple
+            '#4A0E4E',  # Dark Purple
+            '#800026',  # Dark Red
+            '#BD0026',  # Red
+            '#E31A1C',  # Bright Red
+            '#FC4E2A',  # Red Orange
+            '#FD8D3C',  # Orange
+            '#FEB24C',  # Light Orange
+            '#FFFFFF'   # White (hottest/top)
+        ]
+        
+        # Option 7: Sunset gradient (Deep blue to bright yellow)
+        # Evokes progression from night (bottom) to bright day (top)
+        self.sunset_gradient = [
+            '#FFC107',  # Bright Yellow (day/top)
+            '#FF9800',  # Orange
+            '#FF5722',  # Red Orange
+            '#E91E63',  # Pink
+            '#9C27B0',  # Purple
+            '#7986CB',  # Pale Blue
+            '#5C6BC0',  # Light Blue
+            '#3949AB',  # Blue
+            '#283593',  # Dark Blue
+            '#1A237E'   # Deep Blue (night/bottom)
         ]
         
         self.cell_color = "#58761b"
@@ -27,8 +133,8 @@ class ColorManager:
         
         self.color_index = 0
 
-    def create_custom_color_map(self, custom_color_map: dict):
-        self.color_map = custom_color_map
+    def create_custom_color_map(self, custom_color_map: List[str]):
+        self.colors = custom_color_map
     
     def reset_color_index(self):
         self.color_index = 0
@@ -39,6 +145,9 @@ class ColorManager:
         return color
     
     def get_color(self, key: str):
+        if not self.colors:
+            self.colors = self.default_colors.copy()
+        
         key = str(key)
         if key in self.color_map:
             return self.color_map[key]
