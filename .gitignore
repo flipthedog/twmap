@@ -9,6 +9,8 @@ data/
 *.jpg
 *.mp4
 *.csv
+*.DS_Store
+/outputs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/

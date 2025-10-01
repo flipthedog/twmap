@@ -1,5 +1,7 @@
 import pandas as pd
 from pandantic import Pandantic
+from pydantic import ValidationError
+
 import boto3 
 import os
 
@@ -8,8 +10,6 @@ from io import StringIO
 from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
 from twmap.world.world_datamodel import WorldModel
 from twmap.world.world_loader import WorldLoader
-
-from typing import List, Optional
 
 import logging
 
@@ -71,41 +71,52 @@ class DataLoader:
             Tuple of (tribe_df, player_df, village_df, conquer_df)
         """
 
-        # Load tribe/ally data
-        content = self.retrieve_from_s3(ally_path)
-        tribe_df = pd.read_csv(StringIO(content), sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
-        tribe_schema = Pandantic(TribeModel)
-        tribe_model = tribe_schema.validate(tribe_df)
-        tribe_model["datetime"] = "_".join(ally_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
-        tribe_model["world_id"] = ally_path.split("/")[-1].split("_")[1]
-        tribe_model["file_path"] = ally_path
+        try:
+            # Load tribe/ally data
+            content = self.retrieve_from_s3(ally_path)
+            tribe_df = pd.read_csv(StringIO(content), sep=",", header=None, names=TribeModel.model_fields.keys(), index_col=False)
+            # Handle NaN values by converting them to empty strings
+            tribe_df = tribe_df.fillna("")
+            tribe_schema = Pandantic(TribeModel)
+            tribe_model = tribe_schema.validate(tribe_df)
+            tribe_model["datetime"] = "_".join(ally_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+            tribe_model["world_id"] = ally_path.split("/")[-1].split("_")[1]
+            tribe_model["file_path"] = ally_path
 
-        # Load player data
-        content = self.retrieve_from_s3(player_path)
-        player_df = pd.read_csv(StringIO(content), sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
-        player_schema = Pandantic(PlayerModel)
-        player_model = player_schema.validate(player_df)
-        player_model["datetime"] = "_".join(player_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
-        player_model["world_id"] = player_path.split("/")[-1].split("_")[1]
-        player_model["file_path"] = player_path
+            # Load player data
+            content = self.retrieve_from_s3(player_path)
+            player_df = pd.read_csv(StringIO(content), sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
+            player_schema = Pandantic(PlayerModel)
+            player_model = player_schema.validate(player_df)
+            player_model["datetime"] = "_".join(player_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+            player_model["world_id"] = player_path.split("/")[-1].split("_")[1]
+            player_model["file_path"] = player_path
 
-        # Load village data
-        content = self.retrieve_from_s3(village_path)
-        village_df = pd.read_csv(StringIO(content), sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
-        village_schema = Pandantic(VillageModel)
-        village_model = village_schema.validate(village_df)
-        village_model["datetime"] = "_".join(village_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
-        village_model["world_id"] = village_path.split("/")[-1].split("_")[1]
-        village_model["file_path"] = village_path
+            # Load village data
+            content = self.retrieve_from_s3(village_path)
+            village_df = pd.read_csv(StringIO(content), sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
+            village_schema = Pandantic(VillageModel)
+            village_model = village_schema.validate(village_df)
+            village_model["datetime"] = "_".join(village_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+            village_model["world_id"] = village_path.split("/")[-1].split("_")[1]
+            village_model["file_path"] = village_path
 
-        # Load conquer data
-        content = self.retrieve_from_s3(conquer_path)
-        conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
-        conquer_schema = Pandantic(ConquerModel)
-        conquer_model = conquer_schema.validate(conquer_df)
-        conquer_model["datetime"] = "_".join(conquer_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
-        conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
-        conquer_model["file_path"] = conquer_path
+            # Load conquer data
+            content = self.retrieve_from_s3(conquer_path)
+            conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
+            conquer_schema = Pandantic(ConquerModel)
+            conquer_model = conquer_schema.validate(conquer_df)
+            conquer_model["datetime"] = "_".join(conquer_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+            conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
+            conquer_model["file_path"] = conquer_path
+
+        except (ValidationError, Exception) as e:
+            logging.error(f"Error loading data files: {e}")
+            #print stack trace
+            import traceback
+            traceback.print_exc()
+            exit(1)
+            return None, None, None, None
 
         return tribe_model, player_model, village_model, conquer_model
     

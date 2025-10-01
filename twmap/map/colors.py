@@ -28,18 +28,19 @@ class ColorManager:
             '#FF0080'   # Pink
         ]
         
-        # Option 2: 10-step gradient colors (Blue to Red spectrum)
+        # Option 2: 10-step gradient colors - Bright to Dark Performance Gradient
+        # Smooth gradient from bright (high ranks) to dark (low ranks)
         self.gradient_colors_10 = [
-            '#0066FF',  # Deep Blue (1)
-            '#0080FF',  # Blue (2)
-            '#00AAFF',  # Light Blue (3)
-            '#00CCFF',  # Cyan Blue (4)
-            '#00FFCC',  # Cyan (5)
-            '#FFCC00',  # Yellow (6)
-            '#FF9900',  # Orange (7)
-            '#FF6600',  # Red Orange (8)
-            '#FF3300',  # Red (9)
-            '#FF0000'   # Pure Red (10)
+            '#FFD700',  # Bright Gold (1st - Highest rank) - Champion gold
+            '#FFB347',  # Light Orange (2nd) - Bright warm tone
+            '#FF8C69',  # Salmon (3rd) - Warm coral
+            '#FF6B9D',  # Pink (4th) - Bright pink
+            '#DA70D6',  # Orchid (5th) - Light purple
+            '#9370DB',  # Medium Slate Blue (6th) - Purple
+            '#6495ED',  # Cornflower Blue (7th) - Medium blue
+            '#4169E1',  # Royal Blue (8th) - Darker blue
+            '#191970',  # Midnight Blue (9th) - Very dark blue
+            '#0F0F23'   # Very Dark Navy (10th - Lowest rank) - Almost black
         ]
         
         # Option 3: High-contrast performance gradient (Purple to Gold)

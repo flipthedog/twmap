@@ -345,7 +345,7 @@ class WorldLoader:
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    loader = WorldLoader(world="143", server="en")
+    loader = WorldLoader(world="146", server="en")
     world = loader.load_world()
     if not world:
         world = loader.create_world(max_coords=750, has_barbarians=True, timelapse_interval=6)

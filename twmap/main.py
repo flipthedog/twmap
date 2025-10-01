@@ -11,10 +11,19 @@ from twmap.mapfactory import MapFactory
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def generate_maps_for_world(world: str, server: str = "en", max_coords: int = 750, max_workers: int = 4, limit_images: int = None):
-    """Generate missing maps for a specific world"""
+def generate_maps_for_world(world: str, server: str = "en", max_coords: int = 750, max_workers: int = 4, limit_images: int = None, interval: int = 1, regenerate_all: bool = False):
+    """Generate missing maps for a specific world
     
-    logging.info(f"Processing world {server}{world}")
+    Args:
+        world: World number (e.g., "143")
+        server: Server name (e.g., "en")
+        max_coords: Maximum coordinates for the world map
+        max_workers: Number of parallel workers
+        limit_images: Limit number of images to process (for testing)
+        interval: Generate every Nth image (1=all, 2=every 2nd, 3=every 3rd, etc.)
+    """
+    
+    logging.info(f"Processing world {server}{world} with interval {interval}")
     
     # Create WorldLoader instance
     world_loader = WorldLoader(world=world, server=server)
@@ -40,27 +49,33 @@ def generate_maps_for_world(world: str, server: str = "en", max_coords: int = 75
         missing_images = [img for img in world_loader.timelapse_images if not img.image_generated]
         world_loader.timelapse_images = missing_images[:limit_images]
         logging.info(f"Limited processing to first {limit_images} images for testing")
-    
-
 
     # Create MapFactory and generate missing maps
     map_factory = MapFactory(world_loader, max_coords=max_coords)
-    map_factory.generate_missing_maps(max_workers=max_workers)
+    map_factory.generate_missing_maps(max_workers=max_workers, regenerate_all=regenerate_all, interval=interval)
     
     logging.info(f"Completed processing world {server}{world}")
 
 def main():
     """Generate all missing maps for all worlds"""
     
-    # List of worlds to process
-    worlds = ["143"]  # Start with just one world for testing
+    # Configuration
+    worlds = ["146"]  # Start with just one world for testing
+    interval = 6  # Generate every 6th image (every 24 hours if data is every 4 hours)
     
-    logging.info("Starting map generation for all worlds")
+    logging.info(f"Starting map generation for all worlds with interval {interval}")
     
     for world in worlds:
         try:
-            # Limit to 2 images for testing
-            generate_maps_for_world(world, server="en", max_coords=750, max_workers=2, limit_images=2)
+            # Generate maps with interval setting
+            generate_maps_for_world(
+                world=world, 
+                server="en", 
+                max_coords=720, 
+                max_workers=4, 
+                interval=interval,
+                regenerate_all=True  # Regenerate all maps
+            )
         except Exception as e:
             logging.error(f"Error processing world en{world}: {e}")
             continue

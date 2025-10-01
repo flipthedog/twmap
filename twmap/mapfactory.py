@@ -31,7 +31,6 @@ class MapFactory:
         """
 
         self.world_loader = world_loader
-        # Remove the sync() call as it doesn't exist
         self.data_loader = DataLoader(world_loader)
         
         self.s3_data_bucket = world_loader.s3_snapshot_bucket
@@ -39,7 +38,7 @@ class MapFactory:
         
         self.s3_client = boto3.client('s3')
             
-        self.custom_color_map = ColorManager().sunset_gradient
+        self.custom_color_map = ColorManager().rainbow_colors
         self.max_coords = max_coords
     
     def create_top_10_map(self, data_filter: DataFilter):
@@ -72,9 +71,19 @@ class MapFactory:
         players_image_bytes = pil_to_bytes(image_top_players_with_legend)
         tribes_image_bytes = pil_to_bytes(image_top_tribes_with_legend)
 
-        self.s3_client.put_object(Bucket=self.s3_map_bucket, Key=self.world_loader.top_players_image_prefix + timestamp_str + ".png", Body=players_image_bytes)
-        self.s3_client.put_object(Bucket=self.s3_map_bucket, Key=self.world_loader.top_tribes_image_prefix + timestamp_str + ".png", Body=tribes_image_bytes)
-    
+        self.s3_client.put_object(
+            Bucket=self.s3_map_bucket, 
+            Key=self.world_loader.top_players_image_prefix + timestamp_str + ".png", 
+            Body=players_image_bytes,
+            ServerSideEncryption='AES256'
+        )
+        self.s3_client.put_object(
+            Bucket=self.s3_map_bucket, 
+            Key=self.world_loader.top_tribes_image_prefix + timestamp_str + ".png", 
+            Body=tribes_image_bytes,
+            ServerSideEncryption='AES256'
+        )
+
     def _process_single_timelapse_image(self, timelapse_image):
         """Process a single timelapse image to generate maps if missing.
         
@@ -124,24 +133,44 @@ class MapFactory:
             logging.error(error_msg)
             return False, error_msg
     
-    def generate_missing_maps(self, max_workers: int = 4):
+    def generate_missing_maps(self, max_workers: int = 4, regenerate_all: bool = False, interval: int = 1):
         """Generate maps for all snapshots in the world loader that are missing in the S3 map bucket.
         
         Args:
             max_workers (int): Maximum number of parallel workers for processing
+            regenerate_all (bool): If True, regenerate ALL maps (overwriting existing ones).
+                                 If False, only generate missing maps.
+            interval (int): Generate every Nth image (1=all, 2=every 2nd, 3=every 3rd, etc.)
         """
         
-        # Get all timelapse images that need processing (not yet generated)
-        missing_timelapse_images = [
-            img for img in self.world_loader.timelapse_images 
-            if not img.image_generated
-        ]
+        if regenerate_all:
+            # Get all timelapse images
+            all_timelapse_images = self.world_loader.timelapse_images
+            progress_desc = "Regenerating all timelapse images"
+            logging.info(f"Regenerating ALL {len(all_timelapse_images)} timelapse images (including existing ones)")
+            logging.warning("This will overwrite all existing maps in the S3 bucket!")
+        else:
+            # Get all timelapse images that need processing (not yet generated)
+            all_timelapse_images = [
+                img for img in self.world_loader.timelapse_images 
+                if not img.image_generated
+            ]
+            progress_desc = "Processing missing timelapse images"
+            logging.info(f"Found {len(all_timelapse_images)} missing timelapse images to process")
         
-        if not missing_timelapse_images:
-            logging.info("No missing timelapse images to process.")
+        # Apply interval filtering - sort by timestamp first to ensure consistent ordering
+        all_timelapse_images.sort(key=lambda x: x.timestamp)
+        
+        if interval > 1:
+            # Select every Nth image starting from the first one
+            timelapse_images = [all_timelapse_images[i] for i in range(0, len(all_timelapse_images), interval)]
+            logging.info(f"Interval filtering: processing every {interval} image(s) - {len(timelapse_images)} out of {len(all_timelapse_images)} total")
+        else:
+            timelapse_images = all_timelapse_images
+        
+        if not timelapse_images:
+            logging.info("No timelapse images to process.")
             return
-        
-        logging.info(f"Found {len(missing_timelapse_images)} missing timelapse images to process")
         
         # Process in parallel
         successful_count = 0
@@ -151,11 +180,11 @@ class MapFactory:
             # Submit all tasks
             future_to_image = {
                 executor.submit(self._process_single_timelapse_image, img): img 
-                for img in missing_timelapse_images
+                for img in timelapse_images
             }
             
             # Process results with progress bar
-            with tqdm.tqdm(total=len(missing_timelapse_images), desc="Processing timelapse images") as pbar:
+            with tqdm.tqdm(total=len(timelapse_images), desc=progress_desc) as pbar:
                 for future in concurrent.futures.as_completed(future_to_image):
                     timelapse_image = future_to_image[future]
                     try:

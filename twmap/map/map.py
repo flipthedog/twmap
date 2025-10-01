@@ -105,7 +105,7 @@ class Map:
         self.grid_color = self.color_manager.grid_color
 
         self.font_size = 32
-        self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", self.font_size)  # Load the font here
+        self.font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", self.font_size)  # Load the font here
 
         self.initial_map()
 
@@ -411,6 +411,14 @@ class Map:
             
             # Draw the name at the centroid
             name = urllib.parse.unquote_plus(entity['name'])
+            # Add black outline for better text visibility
+            outline_offset = 4
+            for dx in [-outline_offset, 0, outline_offset]:
+                for dy in [-outline_offset, 0, outline_offset]:
+                    if dx != 0 or dy != 0:
+                        draw.text((centroid_x + dx, centroid_y + dy), name, fill=(0, 0, 0, 255), font=self.font, anchor="mm")
+            
+            # Draw the main text in white for high contrast
             draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
 
         return self.image
