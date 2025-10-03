@@ -8,8 +8,18 @@ class ColorManager:
         self.colors = []
 
         # Original colors
-        self.default_colors =  [
-            '#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990'
+        self.default_colors = [
+            '#e6194B',  # Red
+            '#f58231',  # Orange
+            '#ffe119',  # Yellow
+            '#bfef45',  # Lime
+            '#3cb44b',  # Green
+            '#469990',  # Teal
+            '#42d4f4',  # Cyan
+            '#4363d8',  # Blue
+            '#911eb4',  # Purple
+            '#f032e6',  # Magenta
+            '#fabed4'   # Pink
         ]
         
         # Option 1: Distinct rainbow colors (avoiding greens and browns)

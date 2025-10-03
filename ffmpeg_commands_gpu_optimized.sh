@@ -1,9 +1,21 @@
 #!/bin/bash
 
+# GPU-Optimized FFmpeg Script for Apple Silicon/Intel Macs with VideoToolbox
+# This version uses hardware acceleration for maximum performance
+
 # Check if AWS CLI is installed
 if ! command -v aws &> /dev/null; then
     echo "AWS CLI is not installed. Please install it first."
     exit 1
+fi
+
+# Check VideoToolbox support
+if ! ffmpeg -hwaccels 2>/dev/null | grep -q videotoolbox; then
+    echo "VideoToolbox hardware acceleration not available. Falling back to software encoding."
+    USE_GPU=false
+else
+    echo "VideoToolbox hardware acceleration detected and enabled."
+    USE_GPU=true
 fi
 
 # Function to process a single world
@@ -94,6 +106,11 @@ process_world() {
     # Process files
     echo "Generating timelapses for world ${WORLD_ID}..."
     echo "Target video duration: ${TARGET_DURATION} seconds (1 minute)"
+    if [ "$USE_GPU" = true ]; then
+        echo "Using Apple VideoToolbox hardware acceleration"
+    else
+        echo "Using software encoding (no GPU acceleration)"
+    fi
 
     # Create timers
     start_time=$(date +%s)
@@ -103,19 +120,46 @@ process_world() {
         PLAYER_COUNT=$(ls -1 ${BASE_DIR}/players/*.png 2>/dev/null | wc -l)
         PLAYER_FRAMERATE=$(calculate_framerate $PLAYER_COUNT)
         
-        echo "Generating player timelapse (using Apple GPU acceleration)..."
+        echo "Generating player timelapse..."
         echo "  - Images: ${PLAYER_COUNT}"
         echo "  - Calculated framerate: ${PLAYER_FRAMERATE} fps"
         echo "  - Estimated duration: $(echo "scale=1; $PLAYER_COUNT / $PLAYER_FRAMERATE" | bc -l) seconds"
         
-        ffmpeg -thread_queue_size 4096 -framerate ${PLAYER_FRAMERATE} -i ${BASE_DIR}/players/%d.png -c:v h264_videotoolbox -b:v 8M -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${PLAYER_FRAMERATE}',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -y -loglevel error
+        if [ "$USE_GPU" = true ]; then
+            # GPU-accelerated encoding with VideoToolbox (no complex filters)
+            ffmpeg -thread_queue_size 4096 -framerate ${PLAYER_FRAMERATE} -i ${BASE_DIR}/players/%d.png \
+                -c:v h264_videotoolbox \
+                -b:v 8M -maxrate 12M -bufsize 16M \
+                -profile:v main \
+                -pix_fmt yuv420p \
+                -allow_sw 1 \
+                ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -y -loglevel error
+        else
+            # Fallback to software encoding with filters
+            ffmpeg -thread_queue_size 4096 -framerate ${PLAYER_FRAMERATE} -i ${BASE_DIR}/players/%d.png \
+                -c:v libx264 -crf 18 \
+                -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${PLAYER_FRAMERATE}',hqdn3d" \
+                -pix_fmt yuv420p \
+                -preset medium \
+                ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -y -loglevel error
+        fi
 
         # Convert MP4 to GIF for players (use lower framerate for smaller GIF)
         GIF_FRAMERATE=$(echo "scale=0; $PLAYER_FRAMERATE / 2" | bc -l)
         if [ "$GIF_FRAMERATE" -lt "1" ]; then
             GIF_FRAMERATE=1
         fi
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
+        
+        # Use GPU acceleration for GIF conversion if available
+        if [ "$USE_GPU" = true ]; then
+            ffmpeg -hwaccel videotoolbox -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 \
+                -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+                -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
+        else
+            ffmpeg -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 \
+                -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+                -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
+        fi
     fi
 
     # Tribes
@@ -123,19 +167,46 @@ process_world() {
         TRIBE_COUNT=$(ls -1 ${BASE_DIR}/tribes/*.png 2>/dev/null | wc -l)
         TRIBE_FRAMERATE=$(calculate_framerate $TRIBE_COUNT)
         
-        echo "Generating tribe timelapse (using Apple GPU acceleration)..."
+        echo "Generating tribe timelapse..."
         echo "  - Images: ${TRIBE_COUNT}"
         echo "  - Calculated framerate: ${TRIBE_FRAMERATE} fps"
         echo "  - Estimated duration: $(echo "scale=1; $TRIBE_COUNT / $TRIBE_FRAMERATE" | bc -l) seconds"
         
-        ffmpeg -thread_queue_size 4096 -framerate ${TRIBE_FRAMERATE} -i ${BASE_DIR}/tribes/%d.png -c:v h264_videotoolbox -b:v 8M -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${TRIBE_FRAMERATE}',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -y -loglevel error
+        if [ "$USE_GPU" = true ]; then
+            # GPU-accelerated encoding with VideoToolbox (no complex filters)
+            ffmpeg -thread_queue_size 4096 -framerate ${TRIBE_FRAMERATE} -i ${BASE_DIR}/tribes/%d.png \
+                -c:v h264_videotoolbox \
+                -b:v 8M -maxrate 12M -bufsize 16M \
+                -profile:v main \
+                -pix_fmt yuv420p \
+                -allow_sw 1 \
+                ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -y -loglevel error
+        else
+            # Fallback to software encoding with filters
+            ffmpeg -thread_queue_size 4096 -framerate ${TRIBE_FRAMERATE} -i ${BASE_DIR}/tribes/%d.png \
+                -c:v libx264 -crf 18 \
+                -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${TRIBE_FRAMERATE}',hqdn3d" \
+                -pix_fmt yuv420p \
+                -preset medium \
+                ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -y -loglevel error
+        fi
 
         # Convert MP4 to GIF for tribes (use lower framerate for smaller GIF)
         GIF_FRAMERATE=$(echo "scale=0; $TRIBE_FRAMERATE / 2" | bc -l)
         if [ "$GIF_FRAMERATE" -lt "1" ]; then
             GIF_FRAMERATE=1
         fi
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_tribe_output.gif -loglevel error
+        
+        # Use GPU acceleration for GIF conversion if available
+        if [ "$USE_GPU" = true ]; then
+            ffmpeg -hwaccel videotoolbox -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 \
+                -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+                -y ${GIF_DIR}/${WORLD_ID}_tribe_output.gif -loglevel error
+        else
+            ffmpeg -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 \
+                -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" \
+                -y ${GIF_DIR}/${WORLD_ID}_tribe_output.gif -loglevel error
+        fi
     fi
 
     # Calculate elapsed time
@@ -150,6 +221,18 @@ process_world() {
 }
 
 # Main script starts here
+echo "GPU-Optimized FFmpeg Timelapse Generator"
+echo "========================================"
+
+# Show GPU status
+if [ "$USE_GPU" = true ]; then
+    echo "✅ Apple VideoToolbox GPU acceleration is ENABLED"
+    echo "   This will significantly speed up video processing"
+else
+    echo "⚠️  GPU acceleration is NOT available - using software encoding"
+fi
+
+echo ""
 echo "Please select how you want to specify worlds:"
 echo "1) Single world (e.g., en144)"
 echo "2) Range of worlds (e.g., en142-en146)"
@@ -200,6 +283,9 @@ case $CHOICE in
 esac
 
 echo "Will process the following worlds: ${WORLDS_TO_PROCESS[*]}"
+if [ "$USE_GPU" = true ]; then
+    echo "🚀 Using GPU acceleration for faster processing!"
+fi
 read -p "Do you want to continue? (y/n): " CONFIRM
 
 if [ "$CONFIRM" != "y" ]; then
@@ -211,6 +297,8 @@ fi
 SUCCESSFUL_WORLDS=()
 FAILED_WORLDS=()
 
+TOTAL_START_TIME=$(date +%s)
+
 for WORLD_ID in "${WORLDS_TO_PROCESS[@]}"; do
     if process_world "$WORLD_ID"; then
         SUCCESSFUL_WORLDS+=("$WORLD_ID")
@@ -218,6 +306,9 @@ for WORLD_ID in "${WORLDS_TO_PROCESS[@]}"; do
         FAILED_WORLDS+=("$WORLD_ID")
     fi
 done
+
+TOTAL_END_TIME=$(date +%s)
+TOTAL_ELAPSED=$((TOTAL_END_TIME - TOTAL_START_TIME))
 
 # Final summary
 echo "===== Processing Summary ====="
@@ -229,6 +320,11 @@ fi
 echo "Failed to process worlds: ${#FAILED_WORLDS[@]}"
 if [ ${#FAILED_WORLDS[@]} -gt 0 ]; then
     echo "  ${FAILED_WORLDS[*]}"
+fi
+
+echo "Total processing time: ${TOTAL_ELAPSED} seconds"
+if [ "$USE_GPU" = true ]; then
+    echo "🎉 GPU acceleration was used - processing should be significantly faster!"
 fi
 
 echo "MP4 files are in the 'outputs/' directory"

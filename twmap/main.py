@@ -60,8 +60,8 @@ def main():
     """Generate all missing maps for all worlds"""
     
     # Configuration
-    worlds = ["146"]  # Start with just one world for testing
-    interval = 6  # Generate every 6th image (every 24 hours if data is every 4 hours)
+    worlds = ["145"]  # Start with just one world for testing
+    interval = 2  # Generate every 2nd image (every 8 hours if data is every 4 hours)
     
     logging.info(f"Starting map generation for all worlds with interval {interval}")
     
@@ -71,7 +71,7 @@ def main():
             generate_maps_for_world(
                 world=world, 
                 server="en", 
-                max_coords=720, 
+                max_coords=750, 
                 max_workers=4, 
                 interval=interval,
                 regenerate_all=True  # Regenerate all maps

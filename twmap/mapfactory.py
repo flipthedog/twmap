@@ -1,3 +1,9 @@
+import sys
+import os
+
+# Add the project root to Python path so we can import twmap modules
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import logging
 
 from twmap.snapshot.dataloader import DataLoader
@@ -6,7 +12,6 @@ from twmap.map.map import Map
 from twmap.world.world_loader import WorldLoader
 from twmap.map.colors import ColorManager
 
-import os
 from typing import List
 import boto3
 from botocore.exceptions import NoCredentialsError, PartialCredentialsError
@@ -15,6 +20,7 @@ import pandas as pd
 import io
 import concurrent.futures
 import tqdm
+import gc
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
@@ -38,7 +44,7 @@ class MapFactory:
         
         self.s3_client = boto3.client('s3')
             
-        self.custom_color_map = ColorManager().rainbow_colors
+        self.custom_color_map = ColorManager().default_colors
         self.max_coords = max_coords
     
     def create_top_10_map(self, data_filter: DataFilter):
@@ -114,20 +120,30 @@ class MapFactory:
             village_key = extract_s3_key(timelapse_image.village_data_path)
             conquer_key = extract_s3_key(timelapse_image.conquer_data_path) if timelapse_image.conquer_data_path else None
             
-            # Load data files using the data loader
-            tribe_df, player_df, village_df, conquer_df = self.data_loader.load_specific_files(
-                ally_key, player_key, village_key, conquer_key
-            )
+            try:
+                # Load data files using the data loader
+                tribe_df, player_df, village_df, conquer_df = self.data_loader.load_specific_files(
+                    ally_key, player_key, village_key, conquer_key
+                )
+                
+                # Create data filter
+                data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
+                
+                # Generate maps
+                self.create_top_10_map(data_filter)
+                
+                logging.info(f"Successfully generated maps for timestamp {timelapse_image.timestamp}")
+                return True, None
             
-            # Create data filter
-            data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
-            
-            # Generate maps
-            self.create_top_10_map(data_filter)
-            
-            logging.info(f"Successfully generated maps for timestamp {timelapse_image.timestamp}")
-            return True, None
-            
+            finally:
+                # Explicitly delete large objects to free memory immediately
+                try:
+                    del tribe_df, player_df, village_df, conquer_df, data_filter
+                except:
+                    pass
+                # Force garbage collection
+                gc.collect()
+                
         except Exception as e:
             error_msg = f"Error processing timestamp {timelapse_image.timestamp}: {str(e)}"
             logging.error(error_msg)
@@ -205,3 +221,57 @@ class MapFactory:
         # Refresh the timelapse images list to reflect the newly generated images
         logging.info("Refreshing timelapse images list...")
         self.world_loader.timelapse_images = self.world_loader.sync_timelapse_images()         
+
+if __name__ == "__main__":
+
+    # Example usage
+    world_loader = WorldLoader(world="146", server="en")
+    #world_loader.sync_timelapse_images()
+    
+    map_factory = MapFactory(world_loader, max_coords=720)
+    # hardcode to only
+    #     Tribe data path: s3://tribalwars-scraped/en146/ally_en146_20250930_221509.txt
+    # Player data path: s3://tribalwars-scraped/en146/player_en146_20250930_221503.txt
+    # Village data path: s3://tribalwars-scraped/en146/village_en146_20250930_221458.txt
+    # Conquer data path: s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt
+
+
+
+    # generate one map for testing
+    # map_factory.world_loader.timelapse_images = map_factory.world_loader.timelapse_images[-1:]
+    
+    # print(f"Generating maps for world {world_loader.world} with {len(world_loader.timelapse_images)} timelapse images")
+    # # for pahts
+    # print(f"Using S3 data bucket: {map_factory.s3_data_bucket}")
+    # print(f"Using S3 map bucket: {map_factory.s3_map_bucket}")
+    # # Load data files using the data loader
+    # print("Loading data files...")
+    # print(f"Tribe data path: {map_factory.world_loader.timelapse_images[0].tribe_data_path}")
+    # print(f"Player data path: {map_factory.world_loader.timelapse_images[0].player_data_path}")
+    # print(f"Village data path: {map_factory.world_loader.timelapse_images[0].village_data_path}")
+    # print(f"Conquer data path: {map_factory.world_loader.timelapse_images[0].conquer_data_path}")
+
+    
+
+    def extract_s3_key(s3_path: str) -> str:
+        if s3_path.startswith('s3://'):
+            # Remove s3://bucket-name/ prefix
+            parts = s3_path.split('/', 3)
+            return parts[3] if len(parts) > 3 else s3_path
+        return s3_path
+    
+    tribe_df, player_df, village_df, conquer_df = map_factory.data_loader.load_specific_files(
+        extract_s3_key("s3://tribalwars-scraped/en146/ally_en146_20250930_221509.txt"),
+        extract_s3_key("s3://tribalwars-scraped/en146/player_en146_20250930_221503.txt"),
+        extract_s3_key("s3://tribalwars-scraped/en146/village_en146_20250930_221458.txt"),
+        extract_s3_key("s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt")
+    )
+    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
+    
+    map = Map(data_filter, custom_color_map=map_factory.custom_color_map, max_coords=720)
+    image_top_players = map.draw_top_players(center_text=True).copy()  # Create the
+    image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=False).copy()  # Create the map with top tribes
+    image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Create the map with top players and legend
+    image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Create the map with top tribes and legend
+    image_top_players_with_legend.show()
+    image_top_tribes_with_legend.show()

@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.10.13"
 dependencies = [
+    "beautifulsoup4>=4.14.2",
     "boto3>=1.40.30",
     "pandantic>=1.0.1",
     "pandas>=2.3.2",

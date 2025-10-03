@@ -78,6 +78,8 @@ class Map:
         self.cell_size = 4
         self.spacing = 1
 
+        self.player_village_size_multiplier = 2.0
+
         self.image_height = self.world_height * (self.cell_size + self.spacing)
         self.image_width = self.world_width * (self.cell_size + self.spacing)
 
@@ -104,7 +106,7 @@ class Map:
 
         self.grid_color = self.color_manager.grid_color
 
-        self.font_size = 32
+        self.font_size = 48
         self.font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", self.font_size)  # Load the font here
 
         self.initial_map()
@@ -391,6 +393,20 @@ class Map:
             
         draw = ImageDraw.Draw(self.image, 'RGBA')
 
+        # Calculate village counts for all entities to determine font scaling
+        village_counts = {}
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            village_counts[entity_id] = len(entity_villages)
+        
+        # Get max and min village counts for scaling
+        if village_counts:
+            max_villages = max(village_counts.values())
+            min_villages = min(village_counts.values())
+        else:
+            max_villages = min_villages = 1
+
         for _, entity in top_entities.iterrows():
             entity_id = entity[filter_type]
             entity_villages = village_df[village_df[filter_type] == entity_id]
@@ -409,16 +425,26 @@ class Map:
             else:
                 continue
             
+            # Calculate scaled font size based on village count
+            village_count = village_counts[entity_id]
+            if max_villages > min_villages:
+                # Scale font size from 100% to 200% of base font size (smaller tribes stay normal, bigger get larger)
+                scale_factor = 1.0 + (village_count - min_villages) / (max_villages - min_villages)
+            else:
+                scale_factor = 1.0
+            
+            scaled_font_size = int(self.font_size * scale_factor)
+            scaled_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", scaled_font_size)
+            
             # Draw the name at the centroid
             name = urllib.parse.unquote_plus(entity['name'])
-            # Add black outline for better text visibility
-            outline_offset = 4
+            # Scale outline offset based on font size
+            outline_offset = max(2, int(4 * scale_factor))
             for dx in [-outline_offset, 0, outline_offset]:
                 for dy in [-outline_offset, 0, outline_offset]:
                     if dx != 0 or dy != 0:
-                        draw.text((centroid_x + dx, centroid_y + dy), name, fill=(0, 0, 0, 255), font=self.font, anchor="mm")
+                        draw.text((centroid_x + dx, centroid_y + dy), name, fill=(0, 0, 0, 255), font=scaled_font, anchor="mm")
             
-            # Draw the main text in white for high contrast
-            draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
+            draw.text((centroid_x, centroid_y), name, fill=fill_color, font=scaled_font, anchor="mm")
 
         return self.image
