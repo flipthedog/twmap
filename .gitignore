@@ -5,7 +5,7 @@ commands.sh
 map/fonts
 notes
 data/
-*.gif
+gifs/
 *.jpg
 *.mp4
 *.csv
