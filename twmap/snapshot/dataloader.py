@@ -113,9 +113,9 @@ class DataLoader:
         except (ValidationError, Exception) as e:
             logging.error(f"Error loading data files: {e}")
             #print stack trace
-            import traceback
-            traceback.print_exc()
-            exit(1)
+            # import traceback
+            # traceback.print_exc()
+            # exit(1)
             return None, None, None, None
 
         return tribe_model, player_model, village_model, conquer_model

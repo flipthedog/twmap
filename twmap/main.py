@@ -9,7 +9,14 @@ from twmap.world.world_loader import WorldLoader
 from twmap.mapfactory import MapFactory
 
 # Set up logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(
+    level=logging.INFO, 
+    format='%(asctime)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('twmap.log'),
+        logging.StreamHandler()
+    ]
+)
 
 def generate_maps_for_world(world: str, server: str = "en", max_coords: int = 750, max_workers: int = 4, limit_images: int = None, interval: int = 1, regenerate_all: bool = False):
     """Generate missing maps for a specific world
@@ -60,7 +67,7 @@ def main():
     """Generate all missing maps for all worlds"""
     
     # Configuration
-    worlds = ["145"]  # Start with just one world for testing
+    worlds = ["142", "143", "144"]  # Start with just one world for testing
     interval = 2  # Generate every 2nd image (every 8 hours if data is every 4 hours)
     
     logging.info(f"Starting map generation for all worlds with interval {interval}")
@@ -72,7 +79,7 @@ def main():
                 world=world, 
                 server="en", 
                 max_coords=750, 
-                max_workers=4, 
+                max_workers=8, 
                 interval=interval,
                 regenerate_all=True  # Regenerate all maps
             )

@@ -25,10 +25,3 @@ The following is a sample of images
 2. uv will create a virtual environment and install the dependencies.
 3. You can now activate the virtual environment with `uv shell`
 4. Run the script with `uv run python main.py` or `uv run python twmap/main.py`
-
-<details>
-  <summary>Clickable Title Here</summary>
-  
-  Content of the collapsible section goes here.
-  This can include paragraphs, lists, code blocks, etc.
-</details>
