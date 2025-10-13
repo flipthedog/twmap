@@ -16,7 +16,7 @@ class WorldLoader:
     """Controls whether data is available for a world and whether Timelapse images have been generated.
     """
 
-    def __init__(self, world: str, server: str, s3_image_bucket: Optional[str] = None, s3_snapshot_bucket: Optional[str] = None):
+    def __init__(self, world: str, server: str, s3_image_bucket: Optional[str] = None, s3_snapshot_bucket: Optional[str] = None, init_load: bool = True):
         self.world = world  # e.g. 142
         self.server = server  # e.g. en
         self.s3_image_bucket = s3_image_bucket or 'tw-timelapse'
@@ -37,9 +37,10 @@ class WorldLoader:
 
         self.settings_dir = f"settings/{self.server}{self.world}/"
         self.world_settings_file = f"{self.settings_dir}world_settings.json"
-
-        self.snapshots: List[SnapshotFileModel] = self.scan_available_snapshots()
-        self.timelapse_images: List[TimelapseImageModel] = self.sync_timelapse_images()
+        
+        if init_load:
+            self.snapshots: List[SnapshotFileModel] = self.scan_available_snapshots()
+            self.timelapse_images: List[TimelapseImageModel] = self.sync_timelapse_images()
         
     def load_world(self) -> Optional[WorldModel]:
         """Load the world model from S3.

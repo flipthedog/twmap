@@ -20,7 +20,7 @@ class DataLoader:
     """Loads a snapshot from S3 into memory as pandas dataframes
     """
 
-    def __init__(self, world_loader: WorldLoader):
+    def __init__(self, world_loader: WorldLoader = None):
         
         self.world_loader = world_loader
 
