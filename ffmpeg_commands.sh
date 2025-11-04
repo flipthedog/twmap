@@ -107,15 +107,23 @@ process_world() {
         echo "  - Images: ${PLAYER_COUNT}"
         echo "  - Calculated framerate: ${PLAYER_FRAMERATE} fps"
         echo "  - Estimated duration: $(echo "scale=1; $PLAYER_COUNT / $PLAYER_FRAMERATE" | bc -l) seconds"
-        
-        ffmpeg -thread_queue_size 4096 -framerate ${PLAYER_FRAMERATE} -i ${BASE_DIR}/players/%d.png -c:v h264_videotoolbox -b:v 8M -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${PLAYER_FRAMERATE}',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -y -loglevel error
+
+        ffmpeg -thread_queue_size 4096 \
+         -framerate ${PLAYER_FRAMERATE} \
+         -i ${BASE_DIR}/players/%d.png \
+         -c:v h264_videotoolbox \
+         -allow_sw 1 \
+         -b:v 8M \
+         -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${PLAYER_FRAMERATE}',hqdn3d" \
+         -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 \
+         -y -loglevel error
 
         # Convert MP4 to GIF for players (use lower framerate for smaller GIF)
-        GIF_FRAMERATE=$(echo "scale=0; $PLAYER_FRAMERATE / 2" | bc -l)
-        if [ "$GIF_FRAMERATE" -lt "1" ]; then
-            GIF_FRAMERATE=1
-        fi
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
+        # GIF_FRAMERATE=$(echo "scale=0; $PLAYER_FRAMERATE / 2" | bc -l)
+        # if [ "$GIF_FRAMERATE" -lt "1" ]; then
+        #     GIF_FRAMERATE=1
+        # fi
+        # ffmpeg -thread_queue_size 1024 -i ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_player_output.gif -loglevel error
     fi
 
     # Tribes
@@ -128,14 +136,23 @@ process_world() {
         echo "  - Calculated framerate: ${TRIBE_FRAMERATE} fps"
         echo "  - Estimated duration: $(echo "scale=1; $TRIBE_COUNT / $TRIBE_FRAMERATE" | bc -l) seconds"
         
-        ffmpeg -thread_queue_size 4096 -framerate ${TRIBE_FRAMERATE} -i ${BASE_DIR}/tribes/%d.png -c:v h264_videotoolbox -b:v 8M -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${TRIBE_FRAMERATE}',hqdn3d" -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -y -loglevel error
+        ffmpeg -thread_queue_size 4096 \
+         -framerate ${TRIBE_FRAMERATE} \
+         -i ${BASE_DIR}/tribes/%d.png \
+         -c:v h264_videotoolbox \
+         -b:v 8M \
+         -allow_sw 1 \
+         -movflags +faststart \
+         -vf "minterpolate='mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=${TRIBE_FRAMERATE}',hqdn3d" \
+         -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 \
+         -y -loglevel error
 
         # Convert MP4 to GIF for tribes (use lower framerate for smaller GIF)
-        GIF_FRAMERATE=$(echo "scale=0; $TRIBE_FRAMERATE / 2" | bc -l)
-        if [ "$GIF_FRAMERATE" -lt "1" ]; then
-            GIF_FRAMERATE=1
-        fi
-        ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_tribe_output.gif -loglevel error
+        # GIF_FRAMERATE=$(echo "scale=0; $TRIBE_FRAMERATE / 2" | bc -l)
+        # if [ "$GIF_FRAMERATE" -lt "1" ]; then
+        #     GIF_FRAMERATE=1
+        # fi
+        # ffmpeg -thread_queue_size 4096 -i ${OUTPUT_DIR}/${WORLD_ID}_tribe_output.mp4 -vf "fps=${GIF_FRAMERATE},scale=iw/2:-1:flags=lanczos,split[s0][s1];[s0]palettegen=max_colors=256[p];[s1][p]paletteuse=dither=bayer:bayer_scale=5:diff_mode=rectangle" -y ${GIF_DIR}/${WORLD_ID}_tribe_output.gif -loglevel error
     fi
 
     # Calculate elapsed time

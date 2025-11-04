@@ -113,6 +113,8 @@ class Map:
 
         self.initial_image = deepcopy(self.image)
 
+        self.entity_centroids = {}
+
     def initial_map(self):
         """Create an initial map with all player villages and barbarians.
         """
@@ -125,7 +127,7 @@ class Map:
             cell_color = self.cell_color
             background_color = self.background_color
         
-        self.image = Image.new("RGB", (self.image_height, self.image_width), background_color)
+        self.image = Image.new("RGBA", (self.image_height, self.image_width), background_color)
         
         draw = ImageDraw.Draw(self.image)
 
@@ -203,16 +205,18 @@ class Map:
         return self.image
     
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
-        
-        image = self.crop_image(image)
+                
+        legend_width = 1000
+        # create separate side image for legend that will be pasted together with map
+        legend_image = Image.new("RGBA", (legend_width, self.image.height), (0, 0, 0, 0))
 
         if self.add_watermark:  
             image = self.watermark("SirolfR")
         
         if self.add_current_date_time:
             image = self.add_current_date_time()
-        
-        draw = ImageDraw.Draw(image)
+
+        draw = ImageDraw.Draw(legend_image)
 
         if top_type == "players":
             if specific:
@@ -232,23 +236,56 @@ class Map:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
-        draw.rectangle([0, 0, 550, (len(ids) + 1) * self.font_size], fill="#000000")
+        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
 
         if specific:
-            draw.text((0, 0), "Tribe Legend", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((0, 0), "Top Tribes", fill=self.tw_color, font=self.font, anchor="lt")
             
             for i in range(0, len(ids)):
                 id = ids[i]
                 draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
                 draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(id))
         else:
-            draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
-        
-            for i in range(0, len(ids)):
-                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(ids[i]))
+            # Create a larger font for the title
+            title_font_size = int(self.font_size * 1.5)  # 50% larger than normal font
+            title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
 
-        return image
+            draw.text((0, 0), f"Top {top_type.capitalize()} - {self.data_filter.world_id}", fill=self.tw_color, font=title_font, anchor="lt")
+
+            # Include horizontal line
+            draw.line([0, self.font_size * 1.5 + 5, legend_width, self.font_size * 1.5 + 5], fill=self.tw_color, width=3)
+
+            for i in range(0, len(ids)):
+                draw.text((75, (i + 1) * self.font_size + 40), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([10, (i + 1) * self.font_size + 40, 50, (i + 1) * self.font_size + 80], fill=self.color_manager.get_color(ids[i]))
+
+        # add another horizontal line at the end
+        draw.line([0, (len(ids) + 1) * self.font_size + 50, legend_width, (len(ids) + 1) * self.font_size + 50], fill=self.tw_color, width=3)
+
+        # Combine legend with main image
+        combined_width = image.width + legend_image.width
+        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_image.paste(image, (0, 0))
+        combined_image.paste(legend_image, (image.width, 0))
+
+        draw = ImageDraw.Draw(combined_image)
+
+        # use the ids to draw lines to centroids
+        for i in range(0, len(ids)):
+            entity_id = ids[i]
+            if entity_id in self.entity_centroids:
+                centroid_x, centroid_y = self.entity_centroids[entity_id]
+                # draw line from legend to centroid
+                legend_x = image.width + 15
+                legend_y = (i + 1) * self.font_size + 50  # approximate y position in legend
+        
+                color = self.color_manager.get_color(entity_id)
+                color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (140,)  
+                draw.line([legend_x, legend_y, centroid_x - image.width / 2 + 100, centroid_y - image.height / 2 + 160], fill=color_rgba, width=5)
+        
+        self.image = combined_image
+
+        return self.image
 
     def draw(self, village_df: DataFrame, field: str, size_multiplier: float = 1.0):
 
@@ -279,7 +316,7 @@ class Map:
         spacing = self.max_border
         
         self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
-        
+
         return self.image
 
     def draw_grid(self, image: Image, color: str, grid_spacing: int):
@@ -891,6 +928,10 @@ class Map:
             
             draw.text((centroid_x, centroid_y), name, fill=fill_color, font=scaled_font, anchor="mm")
 
+            # save the centroid coordinates
+            self.entity_centroids[entity_id] = (centroid_x, centroid_y)
+            print("Entity id: ", entity_id)
+
         return self.image
 
     def draw_advanced_zones(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid", 
@@ -971,9 +1012,13 @@ if __name__ == "__main__":
 
     data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
 
-    map = Map(data_filter, max_coords=700)
+    map = Map(data_filter, max_coords=750)
     top_players_image = map.draw_top_players(center_text=True)
-    top_players_image.show()
+    top_players_image = map.crop_image(top_players_image)
+    top_players_image_with_legend = map.draw_legend(top_type="players")
+    top_players_image_with_legend.show()
 
-    top_tribes_image = map.draw_top_tribes(zones_of_control=True, center_text=True)
-    top_tribes_image.show()
+    top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
+    top_tribes_image = map.crop_image(top_tribes_image)
+    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
+    top_tribes_image_with_legend.show()

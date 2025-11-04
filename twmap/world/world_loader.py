@@ -32,8 +32,10 @@ class WorldLoader:
         self.village_file_prefix = f"{self.server}{self.world}/village_{self.server}{self.world}_"
         self.conquer_file_prefix = f"{self.server}{self.world}/conquer_{self.server}{self.world}_"
 
-        self.top_players_image_prefix = f"{self.server}{self.world}/top_players/en{self.world}_top_players_"
-        self.top_tribes_image_prefix = f"{self.server}{self.world}/top_tribes/en{self.world}_top_tribes_"
+        self.top_players_image_path = f"{self.server}{self.world}/top_players/"
+        self.top_tribes_image_path = f"{self.server}{self.world}/top_tribes/"
+        self.top_players_image_prefix = f"{self.top_players_image_path}{self.server}{self.world}_top_players_"
+        self.top_tribes_image_prefix = f"{self.top_tribes_image_path}{self.server}{self.world}_top_tribes_"
 
         self.settings_dir = f"settings/{self.server}{self.world}/"
         self.world_settings_file = f"{self.settings_dir}world_settings.json"
@@ -158,9 +160,15 @@ class WorldLoader:
                             dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
                             ally_files[timestamp_str] = (dt_obj, key)
                         elif key.startswith(self.conquer_file_prefix):
-                            timestamp_str = key[len(self.conquer_file_prefix):-4]
-                            dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-                            conquer_files[timestamp_str] = (dt_obj, key)
+                            # Conquer files are always named conquer.txt
+                            if key.endswith("conquer.txt"):
+                                # Use a fixed key since conquer.txt is always the same file
+                                conquer_files["conquer"] = (None, key)
+                            else:
+                                # Get the latest possible conquer file by timestamp
+                                timestamp_str = key[len(self.conquer_file_prefix):-4]
+                                dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                                conquer_files[timestamp_str] = (dt_obj, key)    
                         else:
                             other_files.append(key)
                     except Exception as e:

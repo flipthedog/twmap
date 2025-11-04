@@ -68,7 +68,7 @@ def main():
     
     # Configuration
     worlds = ["146"]  # Start with just one world for testing
-    interval = 8  # Generate every 2nd image (every 8 hours if data is every 4 hours)
+    interval = 6  # Generate every 6th image (every 24 hours if data is every 4 hours)
     
     logging.info(f"Starting map generation for all worlds with interval {interval}")
     
@@ -78,10 +78,10 @@ def main():
             generate_maps_for_world(
                 world=world, 
                 server="en", 
-                max_coords=700, 
+                max_coords=750, 
                 max_workers=8, 
                 interval=interval,
-                regenerate_all=True  # Regenerate all maps
+                regenerate_all=True,  # Regenerate all maps
             )
         except Exception as e:
             logging.error(f"Error processing world en{world}: {e}")

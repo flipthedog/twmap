@@ -1,5 +1,6 @@
 import sys
 import os
+from copy import copy
 
 # Add the project root to Python path so we can import twmap modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -56,12 +57,14 @@ class MapFactory:
         
         logging.info(f"Creating top player map for world {data_filter.world_id} at time {data_filter.printed_timestamp}")
         
-        image_top_players = map.draw_top_players(center_text=True).copy()  # Create the map with top players
-        image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=False).copy()  # Create the map with top tribes
+        image_top_players = map.draw_top_players(center_text=True)  # Create the map with top players
+        image_top_players = map.crop_image(image_top_players)
+        image_top_players_with_legend = map.draw_legend(top_type="players")  # Create the map with top players and legend
 
-        image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Create the map with top players and legend
-        image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Create the map with top tribes and legend
-        
+        image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=False)  # Create the map with top tribes
+        image_top_tribes = map.crop_image(image_top_tribes)
+        image_top_tribes_with_legend = map.draw_legend(top_type="tribes")  # Create the map with top tribes and legend
+
         # Convert PIL Images to bytes for S3 upload
         def pil_to_bytes(pil_image):
             """Convert PIL Image to bytes"""
@@ -146,9 +149,42 @@ class MapFactory:
                 
         except Exception as e:
             error_msg = f"Error processing timestamp {timelapse_image.timestamp}: {str(e)}"
-            logging.error(error_msg)
+            logging.error(error_msg, exc_info=True)
             return False, error_msg
-    
+
+    def clear_s3_map_bucket(self):
+        """Clear all maps from the S3 map bucket for the current world."""
+        
+        logging.info(f"Clearing all maps from S3 bucket {self.s3_map_bucket} for world {self.world_loader.world}")
+        
+        prefixes = [
+            self.world_loader.top_players_image_path,
+            self.world_loader.top_tribes_image_path
+        ]
+        
+        for prefix in prefixes:
+            logging.info(f"Clearing maps with prefix {prefix}")
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.s3_map_bucket, Prefix=prefix)
+            
+            objects_to_delete = []
+            for page in pages:
+                if 'Contents' in page:
+                    for obj in page['Contents']:
+                        objects_to_delete.append({'Key': obj['Key']})
+            
+            # Delete objects in batches of 1000 (S3 limit)
+            for i in range(0, len(objects_to_delete), 1000):
+                batch = objects_to_delete[i:i+1000]
+                response = self.s3_client.delete_objects(
+                    Bucket=self.s3_map_bucket,
+                    Delete={'Objects': batch}
+                )
+                deleted_count = len(response.get('Deleted', []))
+                logging.info(f"Deleted {deleted_count} objects from S3 bucket {self.s3_map_bucket}")
+        
+        logging.info(f"Completed clearing maps from S3 bucket {self.s3_map_bucket} for world {self.world_loader.world}")
+
     def generate_missing_maps(self, max_workers: int = 4, regenerate_all: bool = False, interval: int = 1):
         """Generate maps for all snapshots in the world loader that are missing in the S3 map bucket.
         
@@ -163,6 +199,9 @@ class MapFactory:
             # Get all timelapse images
             all_timelapse_images = self.world_loader.timelapse_images
             progress_desc = "Regenerating all timelapse images"
+
+            self.clear_s3_map_bucket()
+            
             logging.info(f"Regenerating ALL {len(all_timelapse_images)} timelapse images (including existing ones)")
             logging.warning("This will overwrite all existing maps in the S3 bucket!")
         else:
@@ -271,6 +310,8 @@ if __name__ == "__main__":
     map = Map(data_filter, custom_color_map=map_factory.custom_color_map, max_coords=720)
     image_top_players = map.draw_top_players(center_text=True).copy()  # Create the
     image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=False).copy()  # Create the map with top tribes
+    image_top_players = map.crop_image(image_top_players)
+    image_top_tribes = map.crop_image(image_top_tribes)
     image_top_players_with_legend = map.draw_legend("players", image_top_players)  # Create the map with top players and legend
     image_top_tribes_with_legend = map.draw_legend("tribes", image_top_tribes)  # Create the map with top tribes and legend
     image_top_players_with_legend.show()
