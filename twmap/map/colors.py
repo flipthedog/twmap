@@ -151,6 +151,9 @@ class ColorManager:
         self.color_index = 0
 
     def get_unique_color(self):
+        if not self.colors:
+            return self.tw_color
+        
         color = self.colors[self.color_index % len(self.colors)]
         self.color_index += 1
         return color
@@ -166,3 +169,7 @@ class ColorManager:
             color = self.get_unique_color()
             self.color_map[key] = color
             return color
+
+    def get_color_without_force(self, key: str):
+        key = str(key)
+        return self.color_map.get(key, self.tw_color)

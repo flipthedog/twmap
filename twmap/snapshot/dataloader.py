@@ -7,7 +7,7 @@ import os
 
 from io import StringIO
 
-from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel
+from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel, KillAllModel, KillTribeModel
 from twmap.world.world_datamodel import WorldModel
 from twmap.world.world_loader import WorldLoader
 
@@ -60,7 +60,7 @@ class DataLoader:
         
         return self.tribe_models, self.player_models, self.village_models, self.conquer_models
 
-    def load_specific_files(self, ally_path: str, player_path: str, village_path: str, conquer_path: str):
+    def load_specific_files(self, ally_path: str, player_path: str, village_path: str, conquer_path: str, killall_path: str = None, killall_tribe_path: str = None):
         """Load specific files from S3 into memory as pandas dataframes
         Args:
             ally_path (str): Path to ally file in S3
@@ -110,6 +110,27 @@ class DataLoader:
             conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
             conquer_model["file_path"] = conquer_path
 
+            # Load killall data if provided
+            if killall_path:
+                content = self.retrieve_from_s3(killall_path)
+                
+                killall_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillAllModel.model_fields.keys(), index_col=False)
+                killall_schema = Pandantic(KillAllModel)
+                killall_model = killall_schema.validate(killall_df)
+                killall_model["datetime"] = "_".join(killall_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+                killall_model["world_id"] = killall_path.split("/")[-1].split("_")[1]
+                killall_model["file_path"] = killall_path
+            
+            if killall_tribe_path:
+                content = self.retrieve_from_s3(killall_tribe_path)
+
+                killall_tribe_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillTribeModel.model_fields.keys(), index_col=False)
+                killall_tribe_schema = Pandantic(KillTribeModel)
+                killall_tribe_model = killall_tribe_schema.validate(killall_tribe_df)
+                killall_tribe_model["datetime"] = "_".join(killall_tribe_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+                killall_tribe_model["world_id"] = killall_tribe_path.split("/")[-1].split("_")[1]
+                killall_tribe_model["file_path"] = killall_tribe_path
+
         except (ValidationError, Exception) as e:
             logging.error(f"Error loading data files: {e}")
             #print stack trace
@@ -118,7 +139,7 @@ class DataLoader:
             # exit(1)
             return None, None, None, None
 
-        return tribe_model, player_model, village_model, conquer_model
+        return tribe_model, player_model, village_model, conquer_model, killall_model if killall_path else None, killall_tribe_model if killall_tribe_path else None
     
     def get_top_10_tribes(self):
         """Create a list of the top 10 tribes over multiple dataframes

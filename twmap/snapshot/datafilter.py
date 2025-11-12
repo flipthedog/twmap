@@ -8,11 +8,15 @@ class DataFilter:
     
     """
 
-    def __init__(self, village_df: pd.DataFrame, player_df: pd.DataFrame, tribe_df: pd.DataFrame, conquer_df: pd.DataFrame):
+    def __init__(self, village_df: pd.DataFrame, player_df: pd.DataFrame, tribe_df: pd.DataFrame, conquer_df: pd.DataFrame,
+                 killall_df: pd.DataFrame = None, killall_df_tribe: pd.DataFrame = None):
         self.village_df = village_df
         self.player_df = player_df
         self.tribe_df = tribe_df
         self.conquer_df = conquer_df
+        self.killall_df = killall_df
+        self.killall_df_tribe = killall_df_tribe
+
         self.printed_timestamp = pd.to_datetime(village_df["datetime"][0], format="%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
         self.world_id = village_df.iloc[0]["world_id"]
 
@@ -38,7 +42,10 @@ class DataFilter:
             data_pull_datetime = data_pull_datetime.astype(int) // 10**9
             data_pull_datetime = data_pull_datetime.iloc[0]
             past_three_days = data_pull_datetime - (86400 * 3)
-            past_day_conquers = self.conquer_df[self.conquer_df["timestamp"] > past_three_days]
+            past_day_conquers = self.conquer_df[
+                (self.conquer_df["timestamp"] > past_three_days) & 
+                (self.conquer_df["timestamp"] <= data_pull_datetime)
+            ]
             if past_day_conquers.empty:
                 logging.info("No conquers found in the past day.")
                 return pd.DataFrame()
@@ -274,3 +281,55 @@ class DataFilter:
         player_villages = self.filter_villages_by_player_names(player_names)
         past_day_conquers = self.get_past_day_conquers()
         return player_villages[player_villages["villageid"].isin(past_day_conquers["villageid"])]
+    
+    def get_top_10_killall_players(self):
+        """Get top 10 killall players.
+
+        Returns:
+            pd.DataFrame: DataFrame containing top 10 killall players.
+        """
+        if self.killall_df is None:
+            logging.info("No killall data available.")
+            return pd.DataFrame()
+        
+        top_10_killall_player_ids = self.killall_df.nlargest(10, "units_defeated")["playerid"].tolist()
+        filtered_players = self.filter_players(top_10_killall_player_ids)
+        result = filtered_players.merge(self.killall_df[['playerid', 'units_defeated']], on='playerid', how='left')
+        return result.sort_values('units_defeated', ascending=False)
+    
+    def get_top_10_killall_tribes(self):
+        """Get top 10 killall tribes.
+
+        Returns:
+            pd.DataFrame: DataFrame containing top 10 killall tribes.
+        """
+        if self.killall_df_tribe is None:
+            logging.info("No killall tribe data available.")
+            return pd.DataFrame()
+        
+        top_10_killall_tribe_ids = self.killall_df_tribe.nlargest(10, "units_defeated")["tribeid"].tolist()
+        filtered_tribes = self.filter_tribes(top_10_killall_tribe_ids)
+        result = filtered_tribes.merge(self.killall_df_tribe[['tribeid', 'units_defeated']], on='tribeid', how='left')
+        return result.sort_values('units_defeated', ascending=False)
+    
+    def get_killall_t10_players(self):
+        """Get killall of top 10 players
+        """
+        t10_players = self.get_t10_players()
+        if self.killall_df is None:
+            logging.info("No killall data available.")
+            return pd.DataFrame()
+        
+        killall_data = self.killall_df[self.killall_df["playerid"].isin(t10_players["playerid"])]
+        return killall_data.merge(self.player_df[['playerid', 'name']], on='playerid', how='left')
+    
+    def get_killall_t10_tribes(self):
+        """Get killall of top 10 tribes
+        """
+        t10_tribes = self.get_t10_tribes()
+        if self.killall_df_tribe is None:
+            logging.info("No killall tribe data available.")
+            return pd.DataFrame()
+        
+        killall_data = self.killall_df_tribe[self.killall_df_tribe["tribeid"].isin(t10_tribes["tribeid"])]
+        return killall_data.merge(self.tribe_df[['tribeid', 'tag']], on='tribeid', how='left')

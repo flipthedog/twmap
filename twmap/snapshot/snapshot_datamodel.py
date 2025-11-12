@@ -58,3 +58,63 @@ class ConquerModel(BaseModel):
     timestamp: int
     new_owner_id: int
     old_owner_id: int
+
+class KillAllModel(BaseModel):
+    """Represents a list of players and their number of units defeated in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    playerid: int
+    units_defeated: int
+
+class KillAttModel(BaseModel):
+    """Represents a list of players and their number of units defeated as attacker in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    playerid: int
+    ops_defeated_as_attacker: int
+
+class KillDefModel(BaseModel):
+    """Represents a list of players and their number of units defeated as defender in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    playerid: int
+    ops_defeated_as_defender: int
+
+class KillTribeModel(BaseModel):
+    """Represents a list of tribes and their number of units defeated in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    tribeid: int
+    units_defeated: int
+
+class KillTribeAttModel(BaseModel):
+    """Represents a list of tribes and their number of units defeated as attacker in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    tribeid: int
+    ops_defeated_as_attacker: int
+
+class KillTribeDefModel(BaseModel):
+    """Represents a list of tribes and their number of units defeated as defender in a snapshot.
+
+    Args:
+        BaseModel (pydantic.BaseModel): The base model class from Pydantic.
+    """
+    rank: int
+    tribeid: int
+    ops_defeated_as_defender: int

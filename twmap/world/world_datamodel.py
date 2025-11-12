@@ -41,6 +41,8 @@ class SnapshotFileModel(BaseWorldModel):
     player_data_path: str
     tribe_data_path: str
     conquer_data_path: Optional[str] = None
+    killall_data_path: Optional[str] = None
+    killall_tribe_data_path: Optional[str] = None
 
 class TimelapseImageModel(SnapshotFileModel):
     """Represents a timelapse image for a world.

@@ -122,15 +122,17 @@ class MapFactory:
             player_key = extract_s3_key(timelapse_image.player_data_path)
             village_key = extract_s3_key(timelapse_image.village_data_path)
             conquer_key = extract_s3_key(timelapse_image.conquer_data_path) if timelapse_image.conquer_data_path else None
-            
+            killall_key = extract_s3_key(timelapse_image.killall_data_path) if timelapse_image.killall_data_path else None
+            killalltribes_key = extract_s3_key(timelapse_image.killall_tribe_data_path) if timelapse_image.killall_tribe_data_path else None
+
             try:
                 # Load data files using the data loader
-                tribe_df, player_df, village_df, conquer_df = self.data_loader.load_specific_files(
-                    ally_key, player_key, village_key, conquer_key
+                tribe_df, player_df, village_df, conquer_df, killall_df, killalltribes_df = self.data_loader.load_specific_files(
+                    ally_key, player_key, village_key, conquer_key, killall_key, killalltribes_key
                 )
                 
                 # Create data filter
-                data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
+                data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killalltribes_df)
                 
                 # Generate maps
                 self.create_top_10_map(data_filter)

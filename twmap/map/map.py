@@ -222,16 +222,22 @@ class Map:
             if specific:
                 ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
                 names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
+                points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
             else:
                 ids = self.t10_players['playerid'].to_list()
                 names = self.t10_players['name'].to_list()
+                points = self.t10_players['points'].to_list()
         elif top_type == "tribes":
             if specific:
                 ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
                 names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
+                tags = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['tag'].tolist()
+                points = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['points'].tolist()
             else:
                 ids = self.t10_tribes['tribeid'].to_list()
                 names = self.t10_tribes['name'].to_list()
+                tags = self.t10_tribes['tag'].to_list()
+                points = self.t10_tribes['tribe_points'].to_list()
         else:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
@@ -243,7 +249,7 @@ class Map:
             
             for i in range(0, len(ids)):
                 id = ids[i]
-                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]", fill=self.tw_color, font=self.font, anchor="lt")
                 draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(id))
         else:
             # Create a larger font for the title
@@ -256,11 +262,45 @@ class Map:
             draw.line([0, self.font_size * 1.5 + 5, legend_width, self.font_size * 1.5 + 5], fill=self.tw_color, width=3)
 
             for i in range(0, len(ids)):
-                draw.text((75, (i + 1) * self.font_size + 40), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
+                if top_type == "tribes":
+                    name_with_tag = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]"
+                    if len(name_with_tag) > 23:
+                        name_with_tag = name_with_tag[:23] + "..."
+                    draw.text((75, (i + 1) * self.font_size + 40), name_with_tag, fill=self.tw_color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 40), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+                else:
+                    name_text = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}"
+                    if len(name_text) > 15:
+                        name_text = name_text[:15] + "..."
+                    draw.text((75, (i + 1) * self.font_size + 40), name_text, fill=self.tw_color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 40), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+
                 draw.rectangle([10, (i + 1) * self.font_size + 40, 50, (i + 1) * self.font_size + 80], fill=self.color_manager.get_color(ids[i]))
 
         # add another horizontal line at the end
         draw.line([0, (len(ids) + 1) * self.font_size + 50, legend_width, (len(ids) + 1) * self.font_size + 50], fill=self.tw_color, width=3)
+
+        # Create a list of top 10 kill all players/tribes in the past day
+        if top_type == "players":
+            top_10_killall = self.data_filter.get_top_10_killall_players()
+        elif top_type == "tribes":
+            top_10_killall = self.data_filter.get_top_10_killall_tribes()
+        else:
+            raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
+        
+        draw.text((0, (len(ids) + 2) * self.font_size + 60), f"Top 10 Opponents Defeated {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        
+        for i in range(0, len(top_10_killall)):
+            id = top_10_killall.iloc[i]["tribeid"] if top_type == "tribes" else top_10_killall.iloc[i]["playerid"]
+            if top_type == "tribes":
+                tag = top_10_killall.iloc[i]["tag"]
+            else:
+                tag = top_10_killall.iloc[i]["name"]
+            defeated = f"{top_10_killall.iloc[i]['units_defeated']:,}"
+            color = self.color_manager.get_color_without_force(id)
+            draw.text((75, (len(ids) + 3 + i) * self.font_size + 60), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
+            draw.text((150, (len(ids) + 3 + i) * self.font_size + 60), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
+            draw.text((500, (len(ids) + 3 + i) * self.font_size + 60), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
 
         # Combine legend with main image
         combined_width = image.width + legend_image.width
@@ -269,7 +309,7 @@ class Map:
         combined_image.paste(legend_image, (image.width, 0))
 
         # This is for drawing lines from legend to centroids -- but its not very good looking
-        
+
         # draw = ImageDraw.Draw(combined_image)
 
         # # use the ids to draw lines to centroids
@@ -452,7 +492,7 @@ class Map:
             
             color = self.color_manager.get_color(entity_id)
             color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 60)
+            fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 255)
             if entity_villages.empty:
                 continue
 
@@ -488,7 +528,7 @@ class Map:
 
             # save the centroid coordinates
             self.entity_centroids[entity_id] = (centroid_x, centroid_y)
-            print("Entity id: ", entity_id)
+            # print("Entity id: ", entity_id)
 
         return self.image
 
@@ -508,14 +548,16 @@ if __name__ == "__main__":
 
     data_loader = DataLoader(world_loader=world_loader)
 
-    tribe_df, player_df, village_df, conquer_df = data_loader.load_specific_files(
+    tribe_df, player_df, village_df, conquer_df, killall_df, killall_tribe_df = data_loader.load_specific_files(
         ally_path=extract_s3_key("s3://tribalwars-scraped/en146/ally_en146_20250930_221509.txt"),
         player_path=extract_s3_key("s3://tribalwars-scraped/en146/player_en146_20250930_221503.txt"),
         village_path=extract_s3_key("s3://tribalwars-scraped/en146/village_en146_20250930_221458.txt"),
-        conquer_path=extract_s3_key("s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt")
+        conquer_path=extract_s3_key("s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt"),
+        killall_path=extract_s3_key("s3://tribalwars-scraped/en146/killall_en146_20250930_221537.txt"),
+        killall_tribe_path=extract_s3_key("s3://tribalwars-scraped/en146/killalltribe_en146_20250930_221553.txt")
     )
 
-    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
+    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df)
 
     map = Map(data_filter, max_coords=750)
     top_players_image = map.draw_top_players(center_text=True)
