@@ -30,7 +30,7 @@ class WorldLoader:
         self.ally_file_prefix = f"{self.server}{self.world}/ally_{self.server}{self.world}_"
         self.player_file_prefix = f"{self.server}{self.world}/player_{self.server}{self.world}_"
         self.village_file_prefix = f"{self.server}{self.world}/village_{self.server}{self.world}_"
-        self.conquer_file_prefix = f"{self.server}{self.world}/conquer_{self.server}{self.world}_"
+        self.conquer_file_prefix = f"{self.server}{self.world}/conquer"
         self.killall_file_prefix = f"{self.server}{self.world}/killall_{self.server}{self.world}_"
         self.killall_tribe_file_prefix = f"{self.server}{self.world}/killalltribe_{self.server}{self.world}_"
 
@@ -164,15 +164,8 @@ class WorldLoader:
                             dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
                             ally_files[timestamp_str] = (dt_obj, key)
                         elif key.startswith(self.conquer_file_prefix):
-                            # Conquer files are always named conquer.txt
-                            if key.endswith("conquer.txt"):
-                                # Use a fixed key since conquer.txt is always the same file
-                                conquer_files["conquer"] = (None, key)
-                            else:
-                                # Get the latest possible conquer file by timestamp
-                                timestamp_str = key[len(self.conquer_file_prefix):-4]
-                                dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
-                                conquer_files[timestamp_str] = (dt_obj, key)    
+                            # just grab conquer.txt
+                            conquer_files["conquer"] = (None, key)
                         elif key.startswith(self.killall_file_prefix):
                             timestamp_str = key[len(self.killall_file_prefix):-4]
                             dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
@@ -225,7 +218,7 @@ class WorldLoader:
                     # Find closest matching files for this village timestamp
                     player_key = find_closest_file(village_dt, player_files)
                     ally_key = find_closest_file(village_dt, ally_files)
-                    conquer_key = find_closest_file(village_dt, conquer_files)
+                    conquer_key = "conquer.txt"
                     killall_key = find_closest_file(village_dt, killall_files)
                     killall_tribe_key = find_closest_file(village_dt, killall_tribe_files)
                     
@@ -241,7 +234,7 @@ class WorldLoader:
                             village_data_path = f"s3://{self.s3_snapshot_bucket}/{village_key}"
                             player_data_path = f"s3://{self.s3_snapshot_bucket}/{player_key}"
                             tribe_data_path = f"s3://{self.s3_snapshot_bucket}/{ally_key}"
-                            conquer_data_path = f"s3://{self.s3_snapshot_bucket}/{conquer_key}" if conquer_key else None
+                            conquer_data_path = f"s3://{self.s3_snapshot_bucket}/{self.server}{self.world}/conquer.txt" if conquer_key else None
                             killall_data_path = f"s3://{self.s3_snapshot_bucket}/{killall_key}" if killall_key else None
                             killall_tribe_data_path = f"s3://{self.s3_snapshot_bucket}/{killall_tribe_key}" if killall_tribe_key else None
 
@@ -371,6 +364,7 @@ class WorldLoader:
         generated_count = sum(1 for img in timelapse_images if img.image_generated)
         self.logger.info(f"Synced {len(timelapse_images)} timelapse image records for {self.server}{self.world} ({generated_count} generated, {len(timelapse_images) - generated_count} pending)")
         
+        self.timelapse_images = timelapse_images
         return timelapse_images
 
 if __name__ == "__main__":

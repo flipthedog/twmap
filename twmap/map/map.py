@@ -245,40 +245,43 @@ class Map:
         draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
 
         if specific:
-            draw.text((0, 0), "Top Tribes", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((10, 60), "Top Tribes", fill=self.tw_color, font=self.font, anchor="lt")
             
             for i in range(0, len(ids)):
                 id = ids[i]
-                draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(id))
+                draw.text((50, (i + 1) * self.font_size + 30), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([0, (i + 1) * self.font_size + 30, 20, (i + 1) * self.font_size + 50], fill=self.color_manager.get_color(id))
         else:
             # Create a larger font for the title
             title_font_size = int(self.font_size * 1.5)  # 50% larger than normal font
             title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
 
-            draw.text((0, 0), f"Top {top_type.capitalize()} - {self.data_filter.world_id}", fill=self.tw_color, font=title_font, anchor="lt")
+            draw.text((legend_width // 2, 60), f"Top {top_type.capitalize()} - {self.data_filter.world_id}", fill=self.tw_color, font=title_font, anchor="mt")
 
             # Include horizontal line
-            draw.line([0, self.font_size * 1.5 + 5, legend_width, self.font_size * 1.5 + 5], fill=self.tw_color, width=3)
+            draw.line([0, self.font_size * 1.5 + 65, legend_width, self.font_size * 1.5 + 65], fill=self.tw_color, width=3)
 
             for i in range(0, len(ids)):
                 if top_type == "tribes":
                     name_with_tag = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]"
                     if len(name_with_tag) > 23:
                         name_with_tag = name_with_tag[:23] + "..."
-                    draw.text((75, (i + 1) * self.font_size + 40), name_with_tag, fill=self.tw_color, font=self.font, anchor="lt")
-                    draw.text((575, (i + 1) * self.font_size + 40), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+                    color = self.color_manager.get_color(ids[i])
+                    draw.text((75, (i + 1) * self.font_size + 120), name_with_tag, fill=color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
                 else:
                     name_text = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}"
                     if len(name_text) > 15:
                         name_text = name_text[:15] + "..."
-                    draw.text((75, (i + 1) * self.font_size + 40), name_text, fill=self.tw_color, font=self.font, anchor="lt")
-                    draw.text((575, (i + 1) * self.font_size + 40), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+                    color = self.color_manager.get_color(ids[i])
+                    
+                    draw.text((75, (i + 1) * self.font_size + 120), name_text, fill=color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
 
-                draw.rectangle([10, (i + 1) * self.font_size + 40, 50, (i + 1) * self.font_size + 80], fill=self.color_manager.get_color(ids[i]))
+                draw.rectangle([10, (i + 1) * self.font_size + 120, 50, (i + 1) * self.font_size + 160], fill=self.color_manager.get_color(ids[i]))
 
         # add another horizontal line at the end
-        draw.line([0, (len(ids) + 1) * self.font_size + 50, legend_width, (len(ids) + 1) * self.font_size + 50], fill=self.tw_color, width=3)
+        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
 
         # Create a list of top 10 kill all players/tribes in the past day
         if top_type == "players":
@@ -288,7 +291,7 @@ class Map:
         else:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
         
-        draw.text((0, (len(ids) + 2) * self.font_size + 60), f"Top 10 Opponents Defeated {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        draw.text((0, (len(ids) + 2) * self.font_size + 160), f"Top 10 Opponents Defeated {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
         for i in range(0, len(top_10_killall)):
             id = top_10_killall.iloc[i]["tribeid"] if top_type == "tribes" else top_10_killall.iloc[i]["playerid"]
@@ -298,9 +301,12 @@ class Map:
                 tag = top_10_killall.iloc[i]["name"]
             defeated = f"{top_10_killall.iloc[i]['units_defeated']:,}"
             color = self.color_manager.get_color_without_force(id)
-            draw.text((75, (len(ids) + 3 + i) * self.font_size + 60), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
-            draw.text((150, (len(ids) + 3 + i) * self.font_size + 60), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
-            draw.text((500, (len(ids) + 3 + i) * self.font_size + 60), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
+            draw.text((75, (len(ids) + 3 + i) * self.font_size + 175), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
+            draw.text((150, (len(ids) + 3 + i) * self.font_size + 175), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
+            draw.text((500, (len(ids) + 3 + i) * self.font_size + 175), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
+
+        # another horizontal line at the end
+        draw.line([0, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220, legend_width, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220], fill=self.tw_color, width=3)
 
         # Combine legend with main image
         combined_width = image.width + legend_image.width

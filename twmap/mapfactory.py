@@ -121,9 +121,15 @@ class MapFactory:
             ally_key = extract_s3_key(timelapse_image.tribe_data_path)
             player_key = extract_s3_key(timelapse_image.player_data_path)
             village_key = extract_s3_key(timelapse_image.village_data_path)
-            conquer_key = extract_s3_key(timelapse_image.conquer_data_path) if timelapse_image.conquer_data_path else None
+            conquer_key = extract_s3_key(timelapse_image.conquer_data_path)
             killall_key = extract_s3_key(timelapse_image.killall_data_path) if timelapse_image.killall_data_path else None
             killalltribes_key = extract_s3_key(timelapse_image.killall_tribe_data_path) if timelapse_image.killall_tribe_data_path else None
+
+            logging.info(f"Loading data files from S3 for timestamp {timelapse_image.timestamp}")
+            logging.info(f"Tribe data path: s3://{self.s3_data_bucket}/{ally_key}")
+            logging.info(f"Player data path: s3://{self.s3_data_bucket}/{player_key}")
+            logging.info(f"Village data path: s3://{self.s3_data_bucket}/{village_key}")
+            logging.info(f"Conquer data path: s3://{self.s3_data_bucket}/{conquer_key}" if conquer_key else "No conquer data path provided.")
 
             try:
                 # Load data files using the data loader
@@ -206,6 +212,10 @@ class MapFactory:
             
             logging.info(f"Regenerating ALL {len(all_timelapse_images)} timelapse images (including existing ones)")
             logging.warning("This will overwrite all existing maps in the S3 bucket!")
+
+            self.world_loader.sync_timelapse_images()  # Refresh the list after clearing
+            all_timelapse_images = self.world_loader.timelapse_images
+            
         else:
             # Get all timelapse images that need processing (not yet generated)
             all_timelapse_images = [

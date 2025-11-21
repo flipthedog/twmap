@@ -28,6 +28,8 @@ class DataLoader:
         self.player_models = []
         self.tribe_models = []
         self.conquer_models = []
+        self.killall_models = []
+        self.killall_tribe_models = []
 
         self.s3_client = boto3.client("s3")
         
@@ -41,24 +43,40 @@ class DataLoader:
         response = self.s3_client.get_object(Bucket=bucket, Key=file_path)
         return response["Body"].read().decode("utf-8")
 
-    def load_all_files(self):
+    def extract_s3_key(self, s3_path: str) -> str:
+        if s3_path.startswith('s3://'):
+            # Remove s3://bucket-name/ prefix
+            parts = s3_path.split('/', 3)
+            return parts[3] if len(parts) > 3 else s3_path
+        return s3_path
+    
+    def load_all_files(self, limit: int = None):
         """Load all files from S3 into memory as pandas dataframes
+        Args:
+            limit (int, optional): Maximum number of snapshots to load. If None, loads all snapshots.
         Returns:
             Tuple of (tribe_df, player_df, village_df, conquer_df)
         """
-        for snapshot in self.world_loader.world_model.snapshots:
-            tribe_model, player_model, village_model, conquer_model = self.load_specific_files(
-                snapshot.tribe_data_path,
-                snapshot.player_data_path,
-                snapshot.village_data_path,
-                snapshot.conquer_data_path
+        snapshots = self.world_loader.snapshots[:limit] if limit else self.world_loader.snapshots
+        
+        for snapshot in snapshots:
+            tribe_model, player_model, village_model, conquer_model, killall_model, killall_tribe_model = self.load_specific_files(
+                self.extract_s3_key(snapshot.tribe_data_path),
+                self.extract_s3_key(snapshot.player_data_path),
+                self.extract_s3_key(snapshot.village_data_path),
+                self.extract_s3_key(snapshot.conquer_data_path),
+                self.extract_s3_key(snapshot.killall_data_path),
+                self.extract_s3_key(snapshot.killall_tribe_data_path)
             )
+
+            self.killall_models.append(killall_model)
+            self.killall_tribe_models.append(killall_tribe_model)
             self.tribe_models.append(tribe_model)
             self.player_models.append(player_model)
             self.village_models.append(village_model)
             self.conquer_models.append(conquer_model)
         
-        return self.tribe_models, self.player_models, self.village_models, self.conquer_models
+        return self.tribe_models, self.player_models, self.village_models, self.conquer_models, self.killall_models, self.killall_tribe_models
 
     def load_specific_files(self, ally_path: str, player_path: str, village_path: str, conquer_path: str, killall_path: str = None, killall_tribe_path: str = None):
         """Load specific files from S3 into memory as pandas dataframes
@@ -103,12 +121,20 @@ class DataLoader:
 
             # Load conquer data
             content = self.retrieve_from_s3(conquer_path)
-            conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
-            conquer_schema = Pandantic(ConquerModel)
-            conquer_model = conquer_schema.validate(conquer_df)
-            conquer_model["datetime"] = "_".join(conquer_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
-            conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
-            conquer_model["file_path"] = conquer_path
+            if content.strip():  # Check if file has content
+                conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
+                conquer_schema = Pandantic(ConquerModel)
+                conquer_model = conquer_schema.validate(conquer_df)
+                # since the conquer file is always named conquer.txt, we extract datetime from village path
+                conquer_model["datetime"] = "_".join(village_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+                conquer_model["world_id"] = village_path.split("/")[-1].split("_")[1]
+                conquer_model["file_path"] = conquer_path
+            else:
+                # Return empty dataframe with correct structure
+                conquer_model = pd.DataFrame(columns=ConquerModel.model_fields.keys())
+                conquer_model["datetime"] = "_".join(conquer_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
+                conquer_model["world_id"] = conquer_path.split("/")[-1].split("_")[1]
+                conquer_model["file_path"] = conquer_path
 
             # Load killall data if provided
             if killall_path:
@@ -134,10 +160,11 @@ class DataLoader:
         except (ValidationError, Exception) as e:
             logging.error(f"Error loading data files: {e}")
             #print stack trace
-            # import traceback
-            # traceback.print_exc()
+            print(conquer_path + "\n\n\n\n")
+            import traceback
+            traceback.print_exc()
             # exit(1)
-            return None, None, None, None
+            return None, None, None, None, None, None
 
         return tribe_model, player_model, village_model, conquer_model, killall_model if killall_path else None, killall_tribe_model if killall_tribe_path else None
     

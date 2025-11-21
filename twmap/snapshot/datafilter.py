@@ -16,7 +16,7 @@ class DataFilter:
         self.conquer_df = conquer_df
         self.killall_df = killall_df
         self.killall_df_tribe = killall_df_tribe
-
+        
         self.printed_timestamp = pd.to_datetime(village_df["datetime"][0], format="%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
         self.world_id = village_df.iloc[0]["world_id"]
 
@@ -292,7 +292,9 @@ class DataFilter:
             logging.info("No killall data available.")
             return pd.DataFrame()
         
-        top_10_killall_player_ids = self.killall_df.nlargest(10, "units_defeated")["playerid"].tolist()
+        killall_df_numeric = self.killall_df.copy()
+        killall_df_numeric["units_defeated"] = pd.to_numeric(killall_df_numeric["units_defeated"], errors='coerce')
+        top_10_killall_player_ids = killall_df_numeric.nlargest(10, "units_defeated")["playerid"].tolist()
         filtered_players = self.filter_players(top_10_killall_player_ids)
         result = filtered_players.merge(self.killall_df[['playerid', 'units_defeated']], on='playerid', how='left')
         return result.sort_values('units_defeated', ascending=False)
@@ -307,9 +309,11 @@ class DataFilter:
             logging.info("No killall tribe data available.")
             return pd.DataFrame()
         
-        top_10_killall_tribe_ids = self.killall_df_tribe.nlargest(10, "units_defeated")["tribeid"].tolist()
+        killall_df_tribe_numeric = self.killall_df_tribe.copy()
+        killall_df_tribe_numeric["units_defeated"] = pd.to_numeric(killall_df_tribe_numeric["units_defeated"], errors='coerce')
+        top_10_killall_tribe_ids = killall_df_tribe_numeric.nlargest(10, "units_defeated")["tribeid"].tolist()
         filtered_tribes = self.filter_tribes(top_10_killall_tribe_ids)
-        result = filtered_tribes.merge(self.killall_df_tribe[['tribeid', 'units_defeated']], on='tribeid', how='left')
+        result = filtered_tribes.merge(killall_df_tribe_numeric[['tribeid', 'units_defeated']], on='tribeid', how='left')
         return result.sort_values('units_defeated', ascending=False)
     
     def get_killall_t10_players(self):
