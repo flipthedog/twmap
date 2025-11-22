@@ -203,7 +203,7 @@ class Map:
         if center_text:
             self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "specifictribe")
         return self.image
-    
+
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
                 
         legend_width = 1000
@@ -307,6 +307,82 @@ class Map:
 
         # another horizontal line at the end
         draw.line([0, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220, legend_width, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220], fill=self.tw_color, width=3)
+        
+        # Number of villages of the top type
+        draw.text((0, (len(ids) + 5 + len(top_10_killall)) * self.font_size + 230), f"Number of Villages of Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+
+        for i in range(0, len(ids)):
+            id = ids[i]
+            offset = 1450
+            draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
+            if top_type == "tribes":
+                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
+                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((100, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+            else:
+                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
+                player_tribeid = self.player_df[self.player_df['playerid'] == id]['tribeid'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == player_tribeid]['tag'].values[0] if player_tribeid in self.tribe_df['tribeid'].values else "No Tribe"
+
+                display_name = urllib.parse.unquote_plus(name)
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((100, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+            
+            if top_type == "tribes":
+                number_of_villages = len(self.data_filter.get_t10_tribe_villages()[self.data_filter.get_t10_tribe_villages()['tribeid'] == id]) if not specific else len(self.village_df[self.village_df['tribeid'] == id])
+            else:
+                number_of_villages = len(self.data_filter.get_t10_player_villages()[self.data_filter.get_t10_player_villages()['playerid'] == id]) if not specific else len(self.village_df[self.village_df['playerid'] == id])
+
+                # write the players tribe tag
+                draw.text((500, (i + 1) * self.font_size + offset), f"{tag}", fill=self.tw_color, font=self.font, anchor="lt")
+
+            
+
+            draw.text((650, (i + 1) * self.font_size + offset), f"{number_of_villages} villages", fill=self.tw_color, font=self.font, anchor="lt")
+
+        # draw another horizontal line at the end
+        draw.line([0, 2000, legend_width, 2000], fill=self.tw_color, width=3)
+
+        # total number of conquers of the top type in the past day
+
+        offset = 2050
+
+        draw.text((0, offset), f"Number of Conquers (72h) - Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        
+        for i in range(0, len(ids)):
+            id = ids[i]
+            
+            if top_type == "tribes":
+                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
+                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((100, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_tribe_ids([id]))
+            else:
+                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
+                display_name = urllib.parse.unquote_plus(name)
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((100, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+            
+                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_player_names([name]))
+
+            draw.text((650, (i + 1) * self.font_size + offset + 10), f"{number_of_conquers} conquers", fill=self.tw_color, font=self.font, anchor="lt")
+        
+        # end horizontal line
+        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
 
         # Combine legend with main image
         combined_width = image.width + legend_image.width
@@ -314,23 +390,6 @@ class Map:
         combined_image.paste(image, (0, 0))
         combined_image.paste(legend_image, (image.width, 0))
 
-        # This is for drawing lines from legend to centroids -- but its not very good looking
-
-        # draw = ImageDraw.Draw(combined_image)
-
-        # # use the ids to draw lines to centroids
-        # for i in range(0, len(ids)):
-        #     entity_id = ids[i]
-        #     if entity_id in self.entity_centroids:
-        #         centroid_x, centroid_y = self.entity_centroids[entity_id]
-        #         # draw line from legend to centroid
-        #         legend_x = image.width + 15
-        #         legend_y = (i + 1) * self.font_size + 50  # approximate y position in legend
-        
-        #         color = self.color_manager.get_color(entity_id)
-        #         color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4)) + (140,)  
-        #         draw.line([legend_x, legend_y, centroid_x - image.width / 2 + 100, centroid_y - image.height / 2 + 160], fill=color_rgba, width=5)
-        
         self.image = combined_image
 
         return self.image
