@@ -44,6 +44,8 @@ class DataLoader:
         return response["Body"].read().decode("utf-8")
 
     def extract_s3_key(self, s3_path: str) -> str:
+        if s3_path is None:
+            return None
         if s3_path.startswith('s3://'):
             # Remove s3://bucket-name/ prefix
             parts = s3_path.split('/', 3)
