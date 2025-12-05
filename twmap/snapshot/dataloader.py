@@ -7,7 +7,7 @@ import os
 
 from io import StringIO
 
-from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel, KillAllModel, KillTribeModel
+from twmap.snapshot.snapshot_datamodel import VillageModel, PlayerModel, TribeModel, ConquerModel, KillAllModel, KillTribeModel, KillAttModel, KillDefModel, KillTribeAttModel, KillTribeDefModel
 from twmap.world.world_datamodel import WorldModel
 from twmap.world.world_loader import WorldLoader
 

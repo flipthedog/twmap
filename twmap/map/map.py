@@ -204,6 +204,103 @@ class Map:
             self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "specifictribe")
         return self.image
 
+    def draw_war_legend(self, window_days: int = 3, top_pairs: int = 10, top_tribes: int = 10, image: Image = None):
+        """Render a styled war legend, matching the aesthetics of other legends."""
+        war_stats = self.data_filter.get_tribe_war_overview(window_days=window_days)
+        pairwise = war_stats.get("pairwise", pd.DataFrame())
+        totals = war_stats.get("totals", pd.DataFrame())
+
+        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
+            logging.info("No war statistics available to draw war legend.")
+            return self.image
+
+        if image is None:
+            image = self.image
+
+        legend_width = 1000
+        legend_image = Image.new("RGBA", (legend_width, image.height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(legend_image)
+
+        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
+
+        title_font_size = int(self.font_size * 1.6)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+        subtitle_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 1.1))
+
+        draw.text((legend_width // 2, 40), f"War Overview - last {window_days} days", fill=self.tw_color, font=title_font, anchor="mt")
+        draw.line([40, 100, legend_width - 40, 100], fill=self.tw_color, width=3)
+
+        section_padding = 40
+        y_offset = 120
+
+        rank_x = section_padding
+        winner_x = rank_x + 60
+        gain_x = winner_x + 280
+        target_x = gain_x + 140
+        time_x = legend_width - section_padding - 160
+
+        if pairwise is not None and not pairwise.empty:
+            draw.text((section_padding, y_offset), "Top Tribe Gains", fill=self.tw_color, font=subtitle_font, anchor="lt")
+            y_offset += self.font_size + 20
+
+            header_y = y_offset
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((winner_x, header_y), "Winner", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((gain_x, header_y), "+Villages", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((target_x, header_y), "From", fill=self.tw_color, font=self.font, anchor="lt")
+            y_offset += self.font_size + 10
+
+            for rank, (_, row) in enumerate(pairwise.head(top_pairs).iterrows(), start=1):
+                attacker_tag = urllib.parse.unquote_plus(str(row.get("new_tribe_tag", "?")))
+                defender_tag = urllib.parse.unquote_plus(str(row.get("old_tribe_tag", "?")))
+                gained = int(row.get("villages_taken", 0))
+                color = self.color_manager.get_color_without_force(row.get("new_tribeid"))
+
+                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
+                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
+                draw.text((winner_x, y_offset), f"[{attacker_tag}]", fill=color, font=self.font, anchor="lt")
+                draw.text((gain_x, y_offset), f"+{gained}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((target_x, y_offset), f"[{defender_tag}]", fill=self.color_manager.get_color_without_force(row.get("old_tribeid")), font=self.font, anchor="lt")
+                y_offset += self.font_size + 12
+
+            y_offset += 20
+
+        if totals is not None and not totals.empty:
+            draw.text((section_padding, y_offset), "Net Village Change", fill=self.tw_color, font=subtitle_font, anchor="lt")
+            y_offset += self.font_size + 20
+
+            header_y = y_offset
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((winner_x, header_y), "Tribe", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((gain_x, header_y), "Net", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((target_x, header_y), "Gained", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((time_x, header_y), "Lost", fill=self.tw_color, font=self.font, anchor="lt")
+            y_offset += self.font_size + 10
+
+            for rank, (_, row) in enumerate(totals.head(top_tribes).iterrows(), start=1):
+                tribe_tag = urllib.parse.unquote_plus(str(row.get("tribe_tag", "?")))
+                gained = int(row.get("villages_gained", 0))
+                lost = int(row.get("villages_lost", 0))
+                net = int(row.get("net_villages", 0))
+                color = self.color_manager.get_color_without_force(row.get("tribeid"))
+
+                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
+                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
+                draw.text((winner_x, y_offset), f"[{tribe_tag}]", fill=color, font=self.font, anchor="lt")
+                draw.text((gain_x, y_offset), f"{net:+}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((target_x, y_offset), f"{gained}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=self.font, anchor="lt")
+                y_offset += self.font_size + 12
+
+        combined_width = image.width + legend_image.width
+        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_image.paste(image, (0, 0))
+        combined_image.paste(legend_image, (image.width, 0))
+
+        self.image = combined_image
+
+        return self.image
+
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
                 
         legend_width = 1000
@@ -633,4 +730,5 @@ if __name__ == "__main__":
     top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
     top_tribes_image = map.crop_image(top_tribes_image)
     top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
-    top_tribes_image_with_legend.show()
+    top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
+    top_tribes_image_with_war.show()

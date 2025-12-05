@@ -280,6 +280,9 @@ class DataFilter:
         """
         player_villages = self.filter_villages_by_player_names(player_names)
         past_day_conquers = self.get_past_day_conquers()
+        if past_day_conquers.empty:
+            logging.info("No conquers found in the past day for the specified player names.")
+            return pd.DataFrame()
         return player_villages[player_villages["villageid"].isin(past_day_conquers["villageid"])]
     
     def get_top_10_killall_players(self):
@@ -337,3 +340,160 @@ class DataFilter:
         
         killall_data = self.killall_df_tribe[self.killall_df_tribe["tribeid"].isin(t10_tribes["tribeid"])]
         return killall_data.merge(self.tribe_df[['tribeid', 'tag']], on='tribeid', how='left')
+    
+    def get_tribe_war_overview(self, window_days: int = 3, tribe_ids: list = None):
+        """Summarize recent village transfers between tribes to highlight war outcomes.
+
+        Args:
+            window_days: Time window (in days) to inspect. Minimum enforced is 1 day.
+            tribe_ids: Optional list of tribe IDs to focus on. If provided, only
+                transfers where either tribe participates will be returned.
+
+        Returns:
+            dict: "pairwise" DataFrame showing per tribe-pair gains and "totals"
+                  DataFrame showing aggregate gains/losses per tribe.
+        """
+        if self.conquer_df.empty:
+            logging.info("No conquer data available to summarize wars.")
+            return {"pairwise": pd.DataFrame(), "totals": pd.DataFrame()}
+
+        data_pull_datetime = self.conquer_df["datetime"]
+        if data_pull_datetime.empty:
+            logging.info("No conquer timestamps available.")
+            return {"pairwise": pd.DataFrame(), "totals": pd.DataFrame()}
+
+        data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y%m%d_%H%M%S")
+        data_pull_datetime = data_pull_datetime.astype(int) // 10**9
+        window_end = data_pull_datetime.iloc[0]
+        window_seconds = max(window_days, 1) * 86400
+        window_start = window_end - window_seconds
+
+        recent_conquers = self.conquer_df[
+            (self.conquer_df["timestamp"] > window_start) &
+            (self.conquer_df["timestamp"] <= window_end)
+        ].copy()
+
+        if recent_conquers.empty:
+            logging.info("No conquers found in the requested window for war overview.")
+            return {"pairwise": pd.DataFrame(), "totals": pd.DataFrame()}
+
+        required_owner_cols = {"new_owner_id", "old_owner_id"}
+        if not required_owner_cols.issubset(recent_conquers.columns):
+            logging.error("Conquer dataframe missing owner columns required for war overview: %s", required_owner_cols)
+            return {"pairwise": pd.DataFrame(), "totals": pd.DataFrame()}
+
+        recent_conquers = recent_conquers.rename(columns={
+            "new_owner_id": "new_playerid",
+            "old_owner_id": "old_playerid"
+        })
+
+        player_subset = self.player_df[["playerid", "tribeid", "name"]]
+        tribe_subset = self.tribe_df[["tribeid", "tag"]]
+
+        recent_conquers = recent_conquers.merge(
+            player_subset.rename(columns={"playerid": "old_playerid", "tribeid": "old_tribeid", "name": "old_player_name"}),
+            on="old_playerid",
+            how="left"
+        )
+        recent_conquers = recent_conquers.merge(
+            player_subset.rename(columns={"playerid": "new_playerid", "tribeid": "new_tribeid", "name": "new_player_name"}),
+            on="new_playerid",
+            how="left"
+        )
+
+        recent_conquers = recent_conquers.merge(
+            tribe_subset.rename(columns={"tribeid": "old_tribeid", "tag": "old_tribe_tag"}),
+            on="old_tribeid",
+            how="left"
+        )
+        recent_conquers = recent_conquers.merge(
+            tribe_subset.rename(columns={"tribeid": "new_tribeid", "tag": "new_tribe_tag"}),
+            on="new_tribeid",
+            how="left"
+        )
+
+        if tribe_ids is not None:
+            tribe_id_set = set(tribe_ids)
+            recent_conquers = recent_conquers[
+                recent_conquers["old_tribeid"].isin(tribe_id_set) |
+                recent_conquers["new_tribeid"].isin(tribe_id_set)
+            ]
+
+        recent_conquers = recent_conquers.dropna(subset=["old_tribeid", "new_tribeid"])
+        recent_conquers = recent_conquers[recent_conquers["old_tribeid"] != recent_conquers["new_tribeid"]]
+
+        if recent_conquers.empty:
+            logging.info("No tribe-versus-tribe conquers to report in the selected window.")
+            return {"pairwise": pd.DataFrame(), "totals": pd.DataFrame()}
+
+        pairwise = recent_conquers.groupby(
+            ["new_tribeid", "new_tribe_tag", "old_tribeid", "old_tribe_tag"],
+            dropna=False
+        ).agg(
+            villages_taken=("villageid", "count"),
+            latest_timestamp=("timestamp", "max")
+        ).reset_index()
+
+        pairwise = pairwise.sort_values("villages_taken", ascending=False)
+
+        gains = pairwise.groupby(["new_tribeid", "new_tribe_tag"], dropna=False)["villages_taken"].sum().reset_index()
+        gains = gains.rename(columns={
+            "new_tribeid": "tribeid",
+            "new_tribe_tag": "tribe_tag",
+            "villages_taken": "villages_gained"
+        })
+
+        losses = pairwise.groupby(["old_tribeid", "old_tribe_tag"], dropna=False)["villages_taken"].sum().reset_index()
+        losses = losses.rename(columns={
+            "old_tribeid": "tribeid",
+            "old_tribe_tag": "tribe_tag",
+            "villages_taken": "villages_lost"
+        })
+
+        tribe_totals = gains.merge(losses, on=["tribeid", "tribe_tag"], how="outer").fillna(0)
+        tribe_totals["net_villages"] = tribe_totals["villages_gained"] - tribe_totals["villages_lost"]
+        tribe_totals = tribe_totals.sort_values("net_villages", ascending=False).reset_index(drop=True)
+
+        return {"pairwise": pairwise, "totals": tribe_totals}
+    
+    def get_past_month_conquers(self):
+        """Get conquers from the past month. Uses the epoch timestamp to filter. Return filter on village df
+
+        Returns:
+            pd.DataFrame: DataFrame containing conquers from the past month.
+        """
+        data_pull_datetime = self.conquer_df["datetime"]
+        if data_pull_datetime.empty:
+            logging.info("No conquers found in the dataset.")
+            return pd.DataFrame()
+        data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y%m%d_%H%M%S")
+        data_pull_datetime = data_pull_datetime.astype(int) // 10**9
+        data_pull_datetime = data_pull_datetime.iloc[0]
+        past_month = data_pull_datetime - (86400 * 30)
+        past_month_conquers = self.conquer_df[
+            (self.conquer_df["timestamp"] > past_month) & 
+            (self.conquer_df["timestamp"] <= data_pull_datetime)
+        ]
+        if past_month_conquers.empty:
+            logging.info("No conquers found in the past month.")
+            return pd.DataFrame()
+        return self.village_df[self.village_df["villageid"].isin(past_month_conquers["villageid"])]
+    
+    def get_biggest_conquerors(self, top_n: int = 10):
+        """Get biggest conquerors in the past month.
+
+        Args:
+            top_n (int): Number of top conquerors to return.
+        Returns:
+            pd.DataFrame: DataFrame containing top N conquerors in the past month.
+        """
+        past_month_conquers = self.get_past_month_conquers()
+        if past_month_conquers.empty:
+            logging.info("No conquers found in the past month for biggest conquerors.")
+            return pd.DataFrame()
+        conquer_counts = past_month_conquers['conqueror_playerid'].value_counts().head(top_n).reset_index()
+        conquer_counts.columns = ['playerid', 'conquer_count']
+        result = conquer_counts.merge(self.player_df[['playerid', 'name']], on='playerid', how='left')
+        return result
+    
+    
