@@ -33,6 +33,10 @@ class WorldLoader:
         self.conquer_file_prefix = f"{self.server}{self.world}/conquer"
         self.killall_file_prefix = f"{self.server}{self.world}/killall_{self.server}{self.world}_"
         self.killall_tribe_file_prefix = f"{self.server}{self.world}/killalltribe_{self.server}{self.world}_"
+        self.killatt_file_prefix = f"{self.server}{self.world}/killatt_{self.server}{self.world}_"
+        self.killdef_file_prefix = f"{self.server}{self.world}/killdef_{self.server}{self.world}_"
+        self.killtribeatt_file_prefix = f"{self.server}{self.world}/killatttribe_{self.server}{self.world}_"
+        self.killtribedef_file_prefix = f"{self.server}{self.world}/killdeftribe_{self.server}{self.world}_"
 
         self.top_players_image_path = f"{self.server}{self.world}/top_players/"
         self.top_tribes_image_path = f"{self.server}{self.world}/top_tribes/"
@@ -140,7 +144,11 @@ class WorldLoader:
                 conquer_files = {}
                 killall_files = {}
                 killall_tribe_files = {}
-                
+                killatt_files = {}
+                killdef_files = {}
+                killtribeatt_files = {}
+                killtribedef_files = {}
+
                 # Log first few files to see what we're working with
                 for i, file in enumerate(files[:10]):
                     self.logger.info(f"Sample file {i+1}: {file['Key']}")
@@ -174,6 +182,22 @@ class WorldLoader:
                             timestamp_str = key[len(self.killall_tribe_file_prefix):-4]
                             dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
                             killall_tribe_files[timestamp_str] = (dt_obj, key)
+                        elif key.startswith(self.killatt_file_prefix):
+                            timestamp_str = key[len(self.killatt_file_prefix):-4]
+                            dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                            killatt_files[timestamp_str] = (dt_obj, key)
+                        elif key.startswith(self.killdef_file_prefix):
+                            timestamp_str = key[len(self.killdef_file_prefix):-4]
+                            dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                            killdef_files[timestamp_str] = (dt_obj, key)
+                        elif key.startswith(self.killtribeatt_file_prefix):
+                            timestamp_str = key[len(self.killtribeatt_file_prefix):-4]
+                            dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                            killtribeatt_files[timestamp_str] = (dt_obj, key)
+                        elif key.startswith(self.killtribedef_file_prefix):
+                            timestamp_str = key[len(self.killtribedef_file_prefix):-4]
+                            dt_obj = datetime.strptime(timestamp_str, "%Y%m%d_%H%M%S")
+                            killtribedef_files[timestamp_str] = (dt_obj, key)
                         else:
                             other_files.append(key)
                     except Exception as e:
@@ -221,7 +245,11 @@ class WorldLoader:
                     conquer_key = "conquer.txt"
                     killall_key = find_closest_file(village_dt, killall_files)
                     killall_tribe_key = find_closest_file(village_dt, killall_tribe_files)
-                    
+                    killatt_key = find_closest_file(village_dt, killatt_files)
+                    killdef_key = find_closest_file(village_dt, killdef_files)
+                    killtribeatt_key = find_closest_file(village_dt, killtribeatt_files)
+                    killtribedef_key = find_closest_file(village_dt, killtribedef_files)
+
                     # Create snapshot if we have the core files (village, player, ally)
                     # Conquer files are optional
                     if player_key and ally_key:
@@ -237,6 +265,10 @@ class WorldLoader:
                             conquer_data_path = f"s3://{self.s3_snapshot_bucket}/{self.server}{self.world}/conquer.txt" if conquer_key else None
                             killall_data_path = f"s3://{self.s3_snapshot_bucket}/{killall_key}" if killall_key else None
                             killall_tribe_data_path = f"s3://{self.s3_snapshot_bucket}/{killall_tribe_key}" if killall_tribe_key else None
+                            killatt_data_path = f"s3://{self.s3_snapshot_bucket}/{killatt_key}" if killatt_key else None
+                            killdef_data_path = f"s3://{self.s3_snapshot_bucket}/{killdef_key}" if killdef_key else None
+                            killtribeatt_data_path = f"s3://{self.s3_snapshot_bucket}/{killtribeatt_key}" if killtribeatt_key else None
+                            killtribedef_data_path = f"s3://{self.s3_snapshot_bucket}/{killtribedef_key}" if killtribedef_key else None
 
                             try:
                                 # Use the village timestamp as the main timestamp for the snapshot
@@ -249,7 +281,11 @@ class WorldLoader:
                                     tribe_data_path=tribe_data_path,
                                     conquer_data_path=conquer_data_path,
                                     killall_data_path=killall_data_path,
-                                    killall_tribe_data_path=killall_tribe_data_path
+                                    killall_tribe_data_path=killall_tribe_data_path,
+                                    killatt_data_path=killatt_data_path,
+                                    killdef_data_path=killdef_data_path,
+                                    killtribeatt_data_path=killtribeatt_data_path,
+                                    killtribedef_data_path=killtribedef_data_path,
                                 )
 
                                 snapshot_files.append(snapshot)
@@ -343,6 +379,10 @@ class WorldLoader:
                 conquer_data_path=snapshot.conquer_data_path,
                 killall_data_path=snapshot.killall_data_path,  
                 killall_tribe_data_path=snapshot.killall_tribe_data_path,
+                killatt_data_path=snapshot.killatt_data_path,  
+                killdef_data_path=snapshot.killdef_data_path,
+                killtribeatt_data_path=snapshot.killtribeatt_data_path,  
+                killtribedef_data_path=snapshot.killtribedef_data_path,
                 top_players_image_path=top_players_path if top_players_exists else None,
                 top_tribes_image_path=top_tribes_path if top_tribes_exists else None,
                 image_generated=top_players_exists and top_tribes_exists

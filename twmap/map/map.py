@@ -710,16 +710,20 @@ if __name__ == "__main__":
 
     data_loader = DataLoader(world_loader=world_loader)
 
-    tribe_df, player_df, village_df, conquer_df, killall_df, killall_tribe_df = data_loader.load_specific_files(
+    tribe_df, player_df, village_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df = data_loader.load_specific_files(
         ally_path=extract_s3_key("s3://tribalwars-scraped/en146/ally_en146_20250930_221509.txt"),
         player_path=extract_s3_key("s3://tribalwars-scraped/en146/player_en146_20250930_221503.txt"),
         village_path=extract_s3_key("s3://tribalwars-scraped/en146/village_en146_20250930_221458.txt"),
         conquer_path=extract_s3_key("s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt"),
         killall_path=extract_s3_key("s3://tribalwars-scraped/en146/killall_en146_20250930_221537.txt"),
-        killall_tribe_path=extract_s3_key("s3://tribalwars-scraped/en146/killalltribe_en146_20250930_221553.txt")
+        killall_tribe_path=extract_s3_key("s3://tribalwars-scraped/en146/killalltribe_en146_20250930_221553.txt"),
+        killatt_path=extract_s3_key("s3://tribalwars-scraped/en146/killatt_en146_20250930_221521.txt"),
+        killdef_path=extract_s3_key("s3://tribalwars-scraped/en146/killdef_en146_20250930_221526.txt"),
+        killtribeatt_path=extract_s3_key("s3://tribalwars-scraped/en146/killatttribe_en146_20250930_221542.txt"),
+        killtribedef_path=extract_s3_key("s3://tribalwars-scraped/en146/killdeftribe_en146_20250930_221548.txt")
     )
 
-    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df)
+    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
 
     map = Map(data_filter, max_coords=750)
     top_players_image = map.draw_top_players(center_text=True)

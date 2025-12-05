@@ -9,13 +9,18 @@ class DataFilter:
     """
 
     def __init__(self, village_df: pd.DataFrame, player_df: pd.DataFrame, tribe_df: pd.DataFrame, conquer_df: pd.DataFrame,
-                 killall_df: pd.DataFrame = None, killall_df_tribe: pd.DataFrame = None):
+                 killall_df: pd.DataFrame = None, killall_df_tribe: pd.DataFrame = None, killatt_df: pd.DataFrame = None, 
+                 killdef_df: pd.DataFrame = None, killtribeatt_df: pd.DataFrame = None, killtribedef_df: pd.DataFrame = None):
         self.village_df = village_df
         self.player_df = player_df
         self.tribe_df = tribe_df
         self.conquer_df = conquer_df
         self.killall_df = killall_df
         self.killall_df_tribe = killall_df_tribe
+        self.killatt_df = killatt_df
+        self.killdef_df = killdef_df
+        self.killtribeatt_df = killtribeatt_df
+        self.killtribedef_df = killtribedef_df
         
         self.printed_timestamp = pd.to_datetime(village_df["datetime"][0], format="%Y%m%d_%H%M%S").strftime("%Y-%m-%d %H:%M:%S")
         self.world_id = village_df.iloc[0]["world_id"]

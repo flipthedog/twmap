@@ -43,6 +43,10 @@ class SnapshotFileModel(BaseWorldModel):
     conquer_data_path: Optional[str] = None
     killall_data_path: Optional[str] = None
     killall_tribe_data_path: Optional[str] = None
+    killatt_data_path: Optional[str] = None
+    killdef_data_path: Optional[str] = None
+    killtribeatt_data_path: Optional[str] = None
+    killtribedef_data_path: Optional[str] = None
 
 class TimelapseImageModel(SnapshotFileModel):
     """Represents a timelapse image for a world.
