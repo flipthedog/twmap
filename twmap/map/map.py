@@ -1,9 +1,10 @@
 from PIL import Image, ImageDraw, ImageFont
 
-from pandas import DataFrame 
+import pandas as pd
+from pandas import DataFrame
+from sklearn.cluster import KMeans 
 
-from twmap.datamodel.datafilter import DataFilter
-from twmap.datamodel.datamodel import VillageModel
+from twmap.snapshot.datafilter import DataFilter
 from twmap.map.colors import ColorManager
 
 from typing import List
@@ -14,11 +15,12 @@ import urllib.parse
 
 import logging
 from copy import deepcopy
+from scipy.spatial import ConvexHull
 
 
 class Map:
 
-    def __init__(self, village_df: DataFrame, player_df: DataFrame, tribe_df: DataFrame, conquer_df: DataFrame, printed_datetime: str = None, printed_world: str = None):
+    def __init__(self, data_filter: DataFilter, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300):
         """Load it with TW data and create a map
 
         Args:
@@ -27,20 +29,19 @@ class Map:
             tribe_df (DataFrame): DataFrame containing tribe data
             conquer_df (DataFrame): DataFrame containing conquer data
         """
+        self.data_filter = data_filter
 
-        self.village_df = village_df
-        self.player_df = player_df
-        self.tribe_df = tribe_df
-        self.conquer_df = conquer_df
+        self.village_df = data_filter.village_df
+        self.player_df = data_filter.player_df
+        self.tribe_df = data_filter.tribe_df
+        self.conquer_df = data_filter.conquer_df
         
-        self.printed_datetime = printed_datetime
-        self.printed_world = printed_world
+        self.printed_datetime = data_filter.printed_timestamp
+        self.printed_world = data_filter.world_id
         
         if self.printed_datetime is None:
             self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
             # TODO: read this from the file
-
-        self.data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df)
 
         self.t10_players_v = self.data_filter.get_t10_player_villages()
         self.t10_tribes_v = self.data_filter.get_t10_tribe_villages()
@@ -50,6 +51,17 @@ class Map:
         self.past_day_conquers_p10 = self.data_filter.get_past_day_t10_conquers_players()
         self.past_day_conquers_t10 = self.data_filter.get_past_day_t10_conquers_tribes()
         
+        if player_list:
+            logging.info(f"Player list: {player_list}")
+            self.player_list = player_list
+            self.player_village = self.data_filter.filter_villages_by_player_names(player_list)
+            self.player_conquer = self.data_filter.get_past_day_conquers_by_player_names(player_list)
+        if tribe_list:
+            logging.info(f"Tribe list: {tribe_list}")
+            self.tribe_list = tribe_list
+            self.tribe_village = self.data_filter.filter_villages_by_tribe_ids(tribe_list)
+            self.tribe_conquer = self.data_filter.get_past_day_conquers_by_tribe_ids(tribe_list)
+               
         self.world_origin = 500
         self.world_height = 1000
         self.world_width = 1000
@@ -59,14 +71,14 @@ class Map:
 
         self.show_barbarians = True
 
-        self.max_x = self.village_df['x_coord'].max() - self.world_origin + 20
-        self.max_y = self.village_df['y_coord'].max() - self.world_origin + 20
-        self.max_border = max(self.max_x, self.max_y)
-                
+        self.max_border = max_coords - self.world_origin + 20
+        
         self.zoom = 3
 
         self.cell_size = 4
         self.spacing = 1
+
+        self.player_village_size_multiplier = 2.0
 
         self.image_height = self.world_height * (self.cell_size + self.spacing)
         self.image_width = self.world_width * (self.cell_size + self.spacing)
@@ -76,6 +88,10 @@ class Map:
 
         self.color_manager = ColorManager()
 
+        if custom_color_map:
+            logging.info("Loaded custom color map")
+            self.color_manager.create_custom_color_map(custom_color_map)
+            
         self.cell_color = self.color_manager.cell_color
         self.background_color = self.color_manager.background_color
         
@@ -90,24 +106,18 @@ class Map:
 
         self.grid_color = self.color_manager.grid_color
 
-        self.font_size = 32
-        self.font = ImageFont.truetype("twmap/map/fonts/ARIAL.TTF", self.font_size)  # Load the font here
+        self.font_size = 48
+        self.font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", self.font_size)  # Load the font here
 
         self.initial_map()
 
         self.initial_image = deepcopy(self.image)
-        
-        self.image_top_players = self.draw_top_players().copy()  # Save the map with top players
-        self.color_manager.reset_color_index()
-        self.image_top_tribes = self.draw_top_tribes().copy()  # Save the map with top tribes
 
-        self.image_top_players_with_legend = self.draw_legend("players", self.image_top_players)  # Save the map with top players and legend
-        self.image_top_tribes_with_legend = self.draw_legend("tribes", self.image_top_tribes)  # Save the map with top tribes and legend
+        self.entity_centroids = {}
 
     def initial_map(self):
-
-        # create list of villages
-        villages = [VillageModel(**village) for village in self.village_df.to_dict(orient="records")]
+        """Create an initial map with all player villages and barbarians.
+        """
         
         # draw a grid pattern with each box representing a village
         if self.dull_colors:
@@ -117,7 +127,7 @@ class Map:
             cell_color = self.cell_color
             background_color = self.background_color
         
-        self.image = Image.new("RGB", (self.image_height, self.image_width), background_color)
+        self.image = Image.new("RGBA", (self.image_height, self.image_width), background_color)
         
         draw = ImageDraw.Draw(self.image)
 
@@ -139,60 +149,356 @@ class Map:
         if self.show_grid:
             self.draw_grid(self.image, self.grid_color, 100)
             
-        if self.watermark:
-            self.watermark("github.com/flipthedog/twmap")
+        if self.add_watermark:
+            self.watermark("SirolfR")
         
         if self.add_current_date_time:
             self.add_current_date_time()
-
-    def draw_top_players(self):
+    
+    def draw_top_players(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
         logging.info(f"Found {len(self.t10_players)} top players")
-        self.image = self.initial_image
+        self.image = deepcopy(self.initial_image)
         self.draw(self.t10_players_v, "playerid")
         self.draw(self.past_day_conquers_p10, "playerid", 3)
+        # Call the function to draw zones of control for the top 10 player villages
+        if zones_of_control:
+            self.draw_zones_of_control(self.t10_players_v, 10)
+        if center_text:
+            self.draw_centroid_text(self.t10_players_v, 10, "playerid")
+        self.color_manager.reset_color_index()
         return self.image
     
-    def draw_top_tribes(self):
+    def draw_top_tribes(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
         logging.info(f"Found {len(self.t10_tribes)} top tribes")
-        self.image = self.initial_image
+        self.image = deepcopy(self.initial_image)
         self.draw(self.t10_tribes_v, "tribeid")
         self.draw(self.past_day_conquers_t10, "tribeid", 3)
+        if zones_of_control:
+            self.draw_influence_zones(self.t10_tribes_v, 10, "tribeid", "clusters")
+        if center_text:
+            self.draw_centroid_text(self.t10_tribes_v, 10, "tribeid")
+        self.color_manager.reset_color_index()
         return self.image
 
-    def draw_legend(self, top_type: str = "players", image: Image = None):
-        
-        image = self.crop_image(image)
+    def draw_specific_players(self, zones_of_control: bool = False, center_text: bool = False):
+        logging.info(f"Drawing {len(self.player_village)} villages of specific players")
+        self.image = deepcopy(self.initial_image)
+        self.draw(self.player_village, "playerid")
+        self.draw(self.player_conquer, "playerid", 3)
+        if zones_of_control:
+            self.draw_zones_of_control(self.player_village, len(self.player_list))
+        if center_text:
+            self.draw_centroid_text(self.player_village, len(self.player_list), "specificplayer")
+        return self.image
+    
+    def draw_specific_tribes(self, zones_of_control: bool = False, center_text: bool = False):
+        logging.info(f"Drawing {len(self.tribe_village)} villages of specific tribes")
+        self.image = deepcopy(self.initial_image)
+        self.draw(self.tribe_village, "tribeid")
+        self.draw(self.tribe_conquer, "tribeid", 3)
+        if zones_of_control:
+            self.draw_zones_of_control(self.tribe_village, len(self.tribe_list), "specifictribe")
+        if center_text:
+            self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "specifictribe")
+        return self.image
 
-        if self.watermark:  
-            image = self.watermark("github.com/flipthedog/twmap")
+    def draw_war_legend(self, window_days: int = 3, top_pairs: int = 10, top_tribes: int = 10, image: Image = None):
+        """Render a styled war legend, matching the aesthetics of other legends."""
+        war_stats = self.data_filter.get_tribe_war_overview(window_days=window_days)
+        pairwise = war_stats.get("pairwise", pd.DataFrame())
+        totals = war_stats.get("totals", pd.DataFrame())
+
+
+        if image is None:
+            image = self.image
+
+        legend_width = 1000
+        legend_image = Image.new("RGBA", (legend_width, image.height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(legend_image)
+
+        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
+            logging.info("No war statistics available to draw war legend.")
+            # Still combine the images, just show an empty legend
+            combined_width = image.width + legend_image.width
+            combined_image = Image.new("RGBA", (combined_width, image.height))
+            combined_image.paste(image, (0, 0))
+            combined_image.paste(legend_image, (image.width, 0))
+            self.image = combined_image
+            return self.image
+
+        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
+
+        title_font_size = int(self.font_size * 1.6)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+        subtitle_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 1.1))
+
+        draw.text((legend_width // 2, 40), f"War Overview - last {window_days} days", fill=self.tw_color, font=title_font, anchor="mt")
+        draw.line([40, 100, legend_width - 40, 100], fill=self.tw_color, width=3)
+
+        section_padding = 40
+        y_offset = 120
+
+        rank_x = section_padding
+        winner_x = rank_x + 90
+        gain_x = winner_x + 280
+        target_x = gain_x + 175
+        time_x = legend_width - section_padding - 160
+        row_height = self.font_size + 18
+
+        if pairwise is not None and not pairwise.empty:
+            draw.text((section_padding, y_offset), "Top Tribe Gains", fill=self.tw_color, font=subtitle_font, anchor="lt")
+            y_offset += self.font_size + 20
+
+            header_y = y_offset
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((winner_x, header_y), "Winner", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((gain_x, header_y), "+Villages", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((target_x, header_y), "From", fill=self.tw_color, font=self.font, anchor="lt")
+            y_offset += self.font_size + 10
+
+            for rank, (_, row) in enumerate(pairwise.head(top_pairs).iterrows(), start=1):
+                attacker_tag = urllib.parse.unquote_plus(str(row.get("new_tribe_tag", "?")))
+                defender_tag = urllib.parse.unquote_plus(str(row.get("old_tribe_tag", "?")))
+                gained = int(row.get("villages_taken", 0))
+                color = self.color_manager.get_color_without_force(row.get("new_tribeid"))
+
+                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
+                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
+                draw.text((winner_x, y_offset), f"[{attacker_tag}]", fill=color, font=self.font, anchor="lt")
+                draw.text((gain_x, y_offset), f"+{gained}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((target_x, y_offset), f"[{defender_tag}]", fill=self.color_manager.get_color_without_force(row.get("old_tribeid")), font=self.font, anchor="lt")
+                y_offset += row_height
+
+            y_offset += 30
+
+        if totals is not None and not totals.empty:
+            draw.text((section_padding, y_offset), "Net Village Change", fill=self.tw_color, font=subtitle_font, anchor="lt")
+            y_offset += self.font_size + 20
+
+            header_y = y_offset
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((winner_x, header_y), "Tribe", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((gain_x, header_y), "Net", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((target_x, header_y), "Gained", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((time_x, header_y), "Lost", fill=self.tw_color, font=self.font, anchor="lt")
+            y_offset += self.font_size + 10
+
+            for rank, (_, row) in enumerate(totals.head(top_tribes).iterrows(), start=1):
+                tribe_tag = urllib.parse.unquote_plus(str(row.get("tribe_tag", "?")))
+                gained = int(row.get("villages_gained", 0))
+                lost = int(row.get("villages_lost", 0))
+                net = int(row.get("net_villages", 0))
+                color = self.color_manager.get_color_without_force(row.get("tribeid"))
+
+                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
+                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
+                draw.text((winner_x, y_offset), f"[{tribe_tag}]", fill=color, font=self.font, anchor="lt")
+                draw.text((gain_x, y_offset), f"{net:+}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((target_x, y_offset), f"{gained}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=self.font, anchor="lt")
+                y_offset += row_height
+
+        combined_width = image.width + legend_image.width
+        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_image.paste(image, (0, 0))
+        combined_image.paste(legend_image, (image.width, 0))
+
+        self.image = combined_image
+
+        return self.image
+
+    def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
+                
+        legend_width = 1000
+        # create separate side image for legend that will be pasted together with map
+        legend_image = Image.new("RGBA", (legend_width, self.image.height), (0, 0, 0, 0))
+
+        if self.add_watermark:  
+            image = self.watermark("SirolfR")
         
         if self.add_current_date_time:
-            
             image = self.add_current_date_time()
-        
-        draw = ImageDraw.Draw(image)
+
+        draw = ImageDraw.Draw(legend_image)
 
         if top_type == "players":
-            ids = self.t10_players['playerid'].to_list()
-            names = self.t10_players['name'].to_list()
+            if specific:
+                ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
+                names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
+                points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
+            else:
+                ids = self.t10_players['playerid'].to_list()
+                names = self.t10_players['name'].to_list()
+                points = self.t10_players['points'].to_list()
         elif top_type == "tribes":
-            ids = self.t10_tribes['tribeid'].to_list()
-            names = self.t10_tribes['name'].to_list()
+            if specific:
+                ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
+                names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
+                tags = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['tag'].tolist()
+                points = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['points'].tolist()
+            else:
+                ids = self.t10_tribes['tribeid'].to_list()
+                names = self.t10_tribes['name'].to_list()
+                tags = self.t10_tribes['tag'].to_list()
+                points = self.t10_tribes['tribe_points'].to_list()
         else:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
         # Add background
-        draw.rectangle([0, 0, 450, (len(ids) + 1) * self.font_size], fill="#000000")
+        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
 
-        draw.text((0, 0), f"Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        if specific:
+            draw.text((10, 60), "Top Tribes", fill=self.tw_color, font=self.font, anchor="lt")
+            
+            for i in range(0, len(ids)):
+                id = ids[i]
+                draw.text((50, (i + 1) * self.font_size + 30), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([0, (i + 1) * self.font_size + 30, 20, (i + 1) * self.font_size + 50], fill=self.color_manager.get_color(id))
+        else:
+            # Create a larger font for the title
+            title_font_size = int(self.font_size * 1.5)  # 50% larger than normal font
+            title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+
+            draw.text((legend_width // 2, 60), f"Top {top_type.capitalize()} - {self.data_filter.world_id}", fill=self.tw_color, font=title_font, anchor="mt")
+
+            # Include horizontal line
+            draw.line([0, self.font_size * 1.5 + 65, legend_width, self.font_size * 1.5 + 65], fill=self.tw_color, width=3)
+
+            for i in range(0, len(ids)):
+                if top_type == "tribes":
+                    name_with_tag = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]"
+                    if len(name_with_tag) > 23:
+                        name_with_tag = name_with_tag[:23] + "..."
+                    color = self.color_manager.get_color(ids[i])
+                    draw.text((75, (i + 1) * self.font_size + 120), name_with_tag, fill=color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+                else:
+                    name_text = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}"
+                    if len(name_text) > 15:
+                        name_text = name_text[:15] + "..."
+                    color = self.color_manager.get_color(ids[i])
+                    
+                    draw.text((75, (i + 1) * self.font_size + 120), name_text, fill=color, font=self.font, anchor="lt")
+                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
+
+                draw.rectangle([10, (i + 1) * self.font_size + 120, 50, (i + 1) * self.font_size + 160], fill=self.color_manager.get_color(ids[i]))
+
+        # add another horizontal line at the end
+        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
+
+        # Create a list of top 10 kill all players/tribes in the past day
+        if top_type == "players":
+            top_10_killall = self.data_filter.get_top_10_killall_players()
+        elif top_type == "tribes":
+            top_10_killall = self.data_filter.get_top_10_killall_tribes()
+        else:
+            raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
+        
+        draw.text((0, (len(ids) + 2) * self.font_size + 160), f"Top 10 Opponents Defeated {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+        
+        for i in range(0, len(top_10_killall)):
+            id = top_10_killall.iloc[i]["tribeid"] if top_type == "tribes" else top_10_killall.iloc[i]["playerid"]
+            if top_type == "tribes":
+                tag = top_10_killall.iloc[i]["tag"]
+            else:
+                tag = top_10_killall.iloc[i]["name"]
+            defeated = f"{top_10_killall.iloc[i]['units_defeated']:,}"
+            color = self.color_manager.get_color_without_force(id)
+            draw.text((50, (len(ids) + 3 + i) * self.font_size + 175), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
+            draw.text((110, (len(ids) + 3 + i) * self.font_size + 175), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
+            draw.text((500, (len(ids) + 3 + i) * self.font_size + 175), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
+
+        # another horizontal line at the end
+        draw.line([0, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220, legend_width, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220], fill=self.tw_color, width=3)
+        
+        # Number of villages of the top type
+        draw.text((0, (len(ids) + 5 + len(top_10_killall)) * self.font_size + 230), f"Number of Villages of Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
+
+        for i in range(0, len(ids)):
+            id = ids[i]
+            offset = 1450
+            if top_type == "tribes":
+                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
+                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+            else:
+                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
+                player_tribeid = self.player_df[self.player_df['playerid'] == id]['tribeid'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == player_tribeid]['tag'].values[0] if player_tribeid in self.tribe_df['tribeid'].values else "No Tribe"
+
+                display_name = urllib.parse.unquote_plus(name)
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+            
+            if top_type == "tribes":
+                number_of_villages = len(self.data_filter.get_t10_tribe_villages()[self.data_filter.get_t10_tribe_villages()['tribeid'] == id]) if not specific else len(self.village_df[self.village_df['tribeid'] == id])
+            else:
+                number_of_villages = len(self.data_filter.get_t10_player_villages()[self.data_filter.get_t10_player_villages()['playerid'] == id]) if not specific else len(self.village_df[self.village_df['playerid'] == id])
+
+                # write the players tribe tag
+                draw.text((500, (i + 1) * self.font_size + offset), f"{tag}", fill=self.tw_color, font=self.font, anchor="lt")
+
+            
+
+            draw.text((650, (i + 1) * self.font_size + offset), f"{number_of_villages} villages", fill=self.tw_color, font=self.font, anchor="lt")
+
+        # draw another horizontal line at the end
+        draw.line([0, 2000, legend_width, 2000], fill=self.tw_color, width=3)
+
+        # total number of conquers of the top type in the past day
+
+        offset = 2050
+
+        draw.text((0, offset), f"Number of Conquers (72h) - Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
         
         for i in range(0, len(ids)):
-            draw.text((50, (i + 1) * self.font_size), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.rectangle([0, (i + 1) * self.font_size, 20, (i + 1) * self.font_size + 20], fill=self.color_manager.get_color(ids[i]))
+            id = ids[i]
+            
+            if top_type == "tribes":
+                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
+                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
+                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_tribe_ids([id]))
+            else:
+                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
+                display_name = urllib.parse.unquote_plus(name)
+                if len(display_name) > 20:
+                    display_name = display_name[:20] + "..."
+                color = self.color_manager.get_color(id)
+                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+            
+                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_player_names([name]))
 
-        return image
+            draw.text((650, (i + 1) * self.font_size + offset + 10), f"{number_of_conquers} conquers", fill=self.tw_color, font=self.font, anchor="lt")
+        
+        # end horizontal line
+        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
+
+        # Combine legend with main image
+        combined_width = image.width + legend_image.width
+        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_image.paste(image, (0, 0))
+        combined_image.paste(legend_image, (image.width, 0))
+
+        self.image = combined_image
+
+        return self.image
 
     def draw(self, village_df: DataFrame, field: str, size_multiplier: float = 1.0):
 
@@ -223,7 +529,7 @@ class Map:
         spacing = self.max_border
         
         self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
-        
+
         return self.image
 
     def draw_grid(self, image: Image, color: str, grid_spacing: int):
@@ -253,3 +559,189 @@ class Map:
         
     def local_save(self, filename: str):
         self.image.save(filename, quality=95)
+
+    def draw_zones_of_control(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
+        """
+        Draw zones of control for the top N players or tribes using Convex Hull and mark the centroid.
+
+        Args:
+            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
+            top_n (int): Number of top players or tribes to draw zones for.
+            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
+        """
+        if filter_type == "playerid":
+            top_entities = self.t10_players.head(top_n)
+        elif filter_type == "tribeid":
+            top_entities = self.t10_tribes.head(top_n)
+        elif filter_type == "specifictribe":
+            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
+            filter_type = "tribeid"
+        elif filter_type == "specificplayer":
+            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
+            filter_type = "playerid"
+        else:
+            raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
+
+        draw = ImageDraw.Draw(self.image, 'RGBA')
+
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            if entity_villages.empty:
+                continue
+
+            village_coords = entity_villages[['x_coord', 'y_coord']].values
+            if len(village_coords) > 2:
+                hull = ConvexHull(village_coords)
+                polygon = [
+                    (
+                        village_coords[vertex, 0] * (self.cell_size + self.spacing),
+                        village_coords[vertex, 1] * (self.cell_size + self.spacing)
+                    )
+                    for vertex in hull.vertices
+                ]
+                color = self.color_manager.get_color(entity_id)
+                color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 40)
+                draw.polygon(polygon, outline=color, fill=fill_color)
+
+                # Calculate centroid
+                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
+                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
+
+                # Draw the name at the centroid
+                name = urllib.parse.unquote_plus(entity['name'])
+                draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
+
+        return self.image
+
+    def draw_centroid_text(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
+        """
+        Draw zones of control for the top N players or tribes and mark the centroid with text.
+
+        Args:
+            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
+            top_n (int): Number of top players or tribes to draw zones for.
+            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
+        """
+        if filter_type == "playerid":
+            top_entities = self.t10_players.head(top_n)
+        elif filter_type == "tribeid":
+            top_entities = self.t10_tribes.head(top_n)
+        elif filter_type == "specifictribe":
+            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
+            filter_type = "tribeid"
+        elif filter_type == "specificplayer":
+            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
+            filter_type = "playerid"
+        else:
+            raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
+
+        # If total villages are less than 20, skip drawing
+        if len(village_df) < 20:
+            return self.image
+            
+        draw = ImageDraw.Draw(self.image, 'RGBA')
+
+        # Calculate village counts for all entities to determine font scaling
+        village_counts = {}
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            village_counts[entity_id] = len(entity_villages)
+        
+        # Get max and min village counts for scaling
+        if village_counts:
+            max_villages = max(village_counts.values())
+            min_villages = min(village_counts.values())
+        else:
+            max_villages = min_villages = 1
+
+        for _, entity in top_entities.iterrows():
+            entity_id = entity[filter_type]
+            entity_villages = village_df[village_df[filter_type] == entity_id]
+            
+            color = self.color_manager.get_color(entity_id)
+            color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 255)
+            if entity_villages.empty:
+                continue
+
+            village_coords = entity_villages[['x_coord', 'y_coord']].values
+            if len(village_coords) > 2:
+                # Calculate centroid
+                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
+                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
+            else:
+                continue
+            
+            # Calculate scaled font size based on village count
+            village_count = village_counts[entity_id]
+            if max_villages > min_villages:
+                # Scale font size from 100% to 200% of base font size (smaller tribes stay normal, bigger get larger)
+                scale_factor = 1.0 + (village_count - min_villages) / (max_villages - min_villages)
+            else:
+                scale_factor = 1.0
+            
+            scaled_font_size = int(self.font_size * scale_factor)
+            scaled_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", scaled_font_size)
+            
+            # Draw the name at the centroid
+            name = urllib.parse.unquote_plus(entity['name'])
+            # Scale outline offset based on font size
+            outline_offset = max(2, int(4 * scale_factor))
+            for dx in [-outline_offset, 0, outline_offset]:
+                for dy in [-outline_offset, 0, outline_offset]:
+                    if dx != 0 or dy != 0:
+                        draw.text((centroid_x + dx, centroid_y + dy), name, fill=(0, 0, 0, 255), font=scaled_font, anchor="mm")
+            
+            draw.text((centroid_x, centroid_y), name, fill=fill_color, font=scaled_font, anchor="mm")
+
+            # save the centroid coordinates
+            self.entity_centroids[entity_id] = (centroid_x, centroid_y)
+            # print("Entity id: ", entity_id)
+
+        return self.image
+
+if __name__ == "__main__":
+    from twmap.snapshot.datafilter import DataFilter
+    from twmap.snapshot.dataloader import DataLoader
+    from twmap.world.world_loader import WorldLoader
+    
+    world_loader = WorldLoader(world="146", server="en", init_load=False)
+
+    def extract_s3_key(s3_path: str) -> str:
+        if s3_path.startswith('s3://'):
+            # Remove s3://bucket-name/ prefix
+            parts = s3_path.split('/', 3)
+            return parts[3] if len(parts) > 3 else s3_path
+        return s3_path
+
+    data_loader = DataLoader(world_loader=world_loader)
+
+    tribe_df, player_df, village_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df = data_loader.load_specific_files(
+        ally_path=extract_s3_key("s3://tribalwars-scraped/en146/ally_en146_20250930_221509.txt"),
+        player_path=extract_s3_key("s3://tribalwars-scraped/en146/player_en146_20250930_221503.txt"),
+        village_path=extract_s3_key("s3://tribalwars-scraped/en146/village_en146_20250930_221458.txt"),
+        conquer_path=extract_s3_key("s3://tribalwars-scraped/en146/conquer_en146_20250930_221515.txt"),
+        killall_path=extract_s3_key("s3://tribalwars-scraped/en146/killall_en146_20250930_221537.txt"),
+        killall_tribe_path=extract_s3_key("s3://tribalwars-scraped/en146/killalltribe_en146_20250930_221553.txt"),
+        killatt_path=extract_s3_key("s3://tribalwars-scraped/en146/killatt_en146_20250930_221521.txt"),
+        killdef_path=extract_s3_key("s3://tribalwars-scraped/en146/killdef_en146_20250930_221526.txt"),
+        killtribeatt_path=extract_s3_key("s3://tribalwars-scraped/en146/killatttribe_en146_20250930_221542.txt"),
+        killtribedef_path=extract_s3_key("s3://tribalwars-scraped/en146/killdeftribe_en146_20250930_221548.txt")
+    )
+
+    data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
+
+    map = Map(data_filter, max_coords=750)
+    top_players_image = map.draw_top_players(center_text=True)
+    top_players_image = map.crop_image(top_players_image)
+    top_players_image_with_legend = map.draw_legend(top_type="players")
+    top_players_image_with_legend.show()
+
+    top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
+    top_tribes_image = map.crop_image(top_tribes_image)
+    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
+    top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
+    top_tribes_image_with_war.show()
