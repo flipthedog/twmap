@@ -440,6 +440,8 @@ class DataFilter:
         ).reset_index()
 
         pairwise = pairwise.sort_values("villages_taken", ascending=False)
+        pairwise["new_tribe_tag"] = pairwise["new_tribe_tag"].fillna("-")
+        pairwise["old_tribe_tag"] = pairwise["old_tribe_tag"].fillna("-")
 
         gains = pairwise.groupby(["new_tribeid", "new_tribe_tag"], dropna=False)["villages_taken"].sum().reset_index()
         gains = gains.rename(columns={
@@ -456,6 +458,7 @@ class DataFilter:
         })
 
         tribe_totals = gains.merge(losses, on=["tribeid", "tribe_tag"], how="outer").fillna(0)
+        tribe_totals["tribe_tag"] = tribe_totals["tribe_tag"].replace(0, pd.NA).fillna("-")
         tribe_totals["net_villages"] = tribe_totals["villages_gained"] - tribe_totals["villages_lost"]
         tribe_totals = tribe_totals.sort_values("net_villages", ascending=False).reset_index(drop=True)
 

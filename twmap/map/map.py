@@ -210,9 +210,6 @@ class Map:
         pairwise = war_stats.get("pairwise", pd.DataFrame())
         totals = war_stats.get("totals", pd.DataFrame())
 
-        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
-            logging.info("No war statistics available to draw war legend.")
-            return self.image
 
         if image is None:
             image = self.image
@@ -220,6 +217,16 @@ class Map:
         legend_width = 1000
         legend_image = Image.new("RGBA", (legend_width, image.height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(legend_image)
+
+        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
+            logging.info("No war statistics available to draw war legend.")
+            # Still combine the images, just show an empty legend
+            combined_width = image.width + legend_image.width
+            combined_image = Image.new("RGBA", (combined_width, image.height))
+            combined_image.paste(image, (0, 0))
+            combined_image.paste(legend_image, (image.width, 0))
+            self.image = combined_image
+            return self.image
 
         draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
 
@@ -234,10 +241,11 @@ class Map:
         y_offset = 120
 
         rank_x = section_padding
-        winner_x = rank_x + 60
+        winner_x = rank_x + 90
         gain_x = winner_x + 280
-        target_x = gain_x + 140
+        target_x = gain_x + 175
         time_x = legend_width - section_padding - 160
+        row_height = self.font_size + 18
 
         if pairwise is not None and not pairwise.empty:
             draw.text((section_padding, y_offset), "Top Tribe Gains", fill=self.tw_color, font=subtitle_font, anchor="lt")
@@ -261,9 +269,9 @@ class Map:
                 draw.text((winner_x, y_offset), f"[{attacker_tag}]", fill=color, font=self.font, anchor="lt")
                 draw.text((gain_x, y_offset), f"+{gained}", fill=self.tw_color, font=self.font, anchor="lt")
                 draw.text((target_x, y_offset), f"[{defender_tag}]", fill=self.color_manager.get_color_without_force(row.get("old_tribeid")), font=self.font, anchor="lt")
-                y_offset += self.font_size + 12
+                y_offset += row_height
 
-            y_offset += 20
+            y_offset += 30
 
         if totals is not None and not totals.empty:
             draw.text((section_padding, y_offset), "Net Village Change", fill=self.tw_color, font=subtitle_font, anchor="lt")
@@ -290,7 +298,7 @@ class Map:
                 draw.text((gain_x, y_offset), f"{net:+}", fill=self.tw_color, font=self.font, anchor="lt")
                 draw.text((target_x, y_offset), f"{gained}", fill=self.tw_color, font=self.font, anchor="lt")
                 draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=self.font, anchor="lt")
-                y_offset += self.font_size + 12
+                y_offset += row_height
 
         combined_width = image.width + legend_image.width
         combined_image = Image.new("RGBA", (combined_width, image.height))
@@ -398,8 +406,8 @@ class Map:
                 tag = top_10_killall.iloc[i]["name"]
             defeated = f"{top_10_killall.iloc[i]['units_defeated']:,}"
             color = self.color_manager.get_color_without_force(id)
-            draw.text((75, (len(ids) + 3 + i) * self.font_size + 175), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
-            draw.text((150, (len(ids) + 3 + i) * self.font_size + 175), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
+            draw.text((50, (len(ids) + 3 + i) * self.font_size + 175), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
+            draw.text((110, (len(ids) + 3 + i) * self.font_size + 175), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
             draw.text((500, (len(ids) + 3 + i) * self.font_size + 175), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
 
         # another horizontal line at the end
@@ -411,7 +419,6 @@ class Map:
         for i in range(0, len(ids)):
             id = ids[i]
             offset = 1450
-            draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
             if top_type == "tribes":
                 name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
                 tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
@@ -419,7 +426,8 @@ class Map:
                 if len(display_name) > 20:
                     display_name = display_name[:20] + "..."
                 color = self.color_manager.get_color(id)
-                draw.text((100, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
             else:
                 name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
                 player_tribeid = self.player_df[self.player_df['playerid'] == id]['tribeid'].values[0]
@@ -429,7 +437,8 @@ class Map:
                 if len(display_name) > 20:
                     display_name = display_name[:20] + "..."
                 color = self.color_manager.get_color(id)
-                draw.text((100, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
+                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
             
             if top_type == "tribes":
                 number_of_villages = len(self.data_filter.get_t10_tribe_villages()[self.data_filter.get_t10_tribe_villages()['tribeid'] == id]) if not specific else len(self.village_df[self.village_df['tribeid'] == id])
@@ -463,7 +472,7 @@ class Map:
                     display_name = display_name[:20] + "..."
                 color = self.color_manager.get_color(id)
                 draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((100, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
                 number_of_conquers = len(self.data_filter.get_past_day_conquers_by_tribe_ids([id]))
             else:
                 name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
@@ -472,7 +481,7 @@ class Map:
                     display_name = display_name[:20] + "..."
                 color = self.color_manager.get_color(id)
                 draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((100, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
+                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
             
                 number_of_conquers = len(self.data_filter.get_past_day_conquers_by_player_names([name]))
 

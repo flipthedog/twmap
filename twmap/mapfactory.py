@@ -60,10 +60,11 @@ class MapFactory:
         image_top_players = map.draw_top_players(center_text=True)  # Create the map with top players
         image_top_players = map.crop_image(image_top_players)
         image_top_players_with_legend = map.draw_legend(top_type="players")  # Create the map with top players and legend
-
+        
         image_top_tribes = map.draw_top_tribes(center_text=True, zones_of_control=False)  # Create the map with top tribes
         image_top_tribes = map.crop_image(image_top_tribes)
         image_top_tribes_with_legend = map.draw_legend(top_type="tribes")  # Create the map with top tribes and legend
+        image_top_tribes_with_war = map.draw_war_legend(window_days=30, top_pairs=10, top_tribes=10, image=image_top_tribes_with_legend.copy())  # Create the map with top tribes and war legend
 
         # Convert PIL Images to bytes for S3 upload
         def pil_to_bytes(pil_image):
@@ -78,7 +79,7 @@ class MapFactory:
 
         # Convert images to bytes before uploading
         players_image_bytes = pil_to_bytes(image_top_players_with_legend)
-        tribes_image_bytes = pil_to_bytes(image_top_tribes_with_legend)
+        tribes_image_bytes = pil_to_bytes(image_top_tribes_with_war)
 
         self.s3_client.put_object(
             Bucket=self.s3_map_bucket, 
@@ -124,6 +125,10 @@ class MapFactory:
             conquer_key = extract_s3_key(timelapse_image.conquer_data_path)
             killall_key = extract_s3_key(timelapse_image.killall_data_path) if timelapse_image.killall_data_path else None
             killalltribes_key = extract_s3_key(timelapse_image.killall_tribe_data_path) if timelapse_image.killall_tribe_data_path else None
+            killatt_key = extract_s3_key(timelapse_image.killatt_data_path) if timelapse_image.killatt_data_path else None
+            killdef_key = extract_s3_key(timelapse_image.killdef_data_path) if timelapse_image.killdef_data_path else None
+            killtribeatt_key = extract_s3_key(timelapse_image.killtribeatt_data_path) if timelapse_image.killtribeatt_data_path else None
+            killtribedef_key = extract_s3_key(timelapse_image.killtribedef_data_path) if timelapse_image.killtribedef_data_path else None
 
             logging.info(f"Loading data files from S3 for timestamp {timelapse_image.timestamp}")
             logging.info(f"Tribe data path: s3://{self.s3_data_bucket}/{ally_key}")
@@ -133,12 +138,12 @@ class MapFactory:
 
             try:
                 # Load data files using the data loader
-                tribe_df, player_df, village_df, conquer_df, killall_df, killalltribes_df = self.data_loader.load_specific_files(
-                    ally_key, player_key, village_key, conquer_key, killall_key, killalltribes_key
+                tribe_df, player_df, village_df, conquer_df, killall_df, killalltribes_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df = self.data_loader.load_specific_files(
+                    ally_key, player_key, village_key, conquer_key, killall_key, killalltribes_key, killatt_key, killdef_key, killtribeatt_key, killtribedef_key
                 )
                 
                 # Create data filter
-                data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killalltribes_df)
+                data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killalltribes_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
                 
                 # Generate maps
                 self.create_top_10_map(data_filter)

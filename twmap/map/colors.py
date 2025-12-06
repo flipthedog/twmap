@@ -171,5 +171,5 @@ class ColorManager:
             return color
 
     def get_color_without_force(self, key: str):
-        key = str(key)
+        key = str(int(key))
         return self.color_map.get(key, self.tw_color)
