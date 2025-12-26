@@ -309,6 +309,149 @@ class Map:
 
         return self.image
 
+    def draw_graph(self, top_type: str = "players", graph_type: str = "points", specific: bool = False, legend_width: int = 1000):
+        """Draw a graph of a specific statistic for the top players or tribes.
+
+        Args:
+            top_type (str): "players" or "tribes"
+            image (Image): The base image to draw on.
+
+        Returns:
+            Image: The image with the graph drawn on it.
+        """
+
+        # The following graphs can be drawn:
+        # 1. Points for top 10
+        # 2. Top 10 opponents defeated
+        # 3. Number of villages of top 10
+        # 4. Number of conquers in past week
+
+        if top_type == "players":
+            if specific:
+                ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
+                names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
+                points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
+            else:
+                ids = self.t10_players['playerid'].to_list()
+                names = self.t10_players['name'].to_list()
+                points = self.t10_players['points'].to_list()
+        elif top_type == "tribes":
+            if specific:
+                ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
+                names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
+                tags = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['tag'].tolist()
+                points = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['points'].tolist()
+            else:
+                ids = self.t10_tribes['tribeid'].to_list()
+                names = self.t10_tribes['name'].to_list()
+                tags = self.t10_tribes['tag'].to_list()
+                points = self.t10_tribes['tribe_points'].to_list()
+        else:
+            raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
+
+        graph_height = max(600, (len(ids) + 3) * self.font_size + 200)
+        graph = Image.new("RGBA", (legend_width, graph_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(graph)
+
+        if graph_type == "points":
+            title_font_size = int(self.font_size * 1.6)
+            title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+            title_y = 10
+            title = f"Top {top_type.capitalize()} Points - {self.data_filter.world_id}"
+            draw.text((legend_width // 2, title_y), title, fill=self.tw_color, font=title_font, anchor="mt")
+
+            line_y = title_y + title_font_size + 8
+            draw.line([30, line_y, legend_width - 30, line_y], fill=self.tw_color, width=3)
+
+            max_points = max(points) if points else 1
+
+            # column layout: rank | name | points | bar
+            rank_x = 40
+            name_x = 100
+            points_x = 520
+            bar_left = 750
+            bar_right = legend_width - 40
+            bar_max_width = max(1, bar_right - bar_left)
+            bar_height = int(self.font_size * 0.8)
+
+            base_y = line_y + 8
+
+            for i in range(0, len(ids)):
+                row_y = base_y + i * self.font_size
+                bar_top = row_y + int(self.font_size * 0.2)
+                bar_bottom = bar_top + bar_height
+
+                # rank column with small color swatch
+                color = self.color_manager.get_color(ids[i])
+                draw.rectangle([10, row_y, 30, row_y + 40], fill=color)
+                draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
+
+                # name column with truncation
+                if top_type == "tribes":
+                    raw_name = f"{urllib.parse.unquote_plus(names[i])} [{urllib.parse.unquote_plus(tags[i])}]"
+                    max_name_len = 18
+                else:
+                    raw_name = urllib.parse.unquote_plus(names[i])
+                    max_name_len = 18
+                name_text = raw_name if len(raw_name) <= max_name_len else raw_name[:max_name_len - 3] + "..."
+                draw.text((name_x, row_y), name_text, fill=color, font=self.font, anchor="lt")
+
+                # points column
+                value_label = f"{points[i]:,}"
+                draw.text((points_x, row_y), value_label, fill=self.tw_color, font=self.font, anchor="lt")
+
+                # draw proportional bar background and fill
+                draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], fill="#1f1f1f")
+                bar_width = int(bar_max_width * (points[i] / max_points)) if max_points else 0
+                if bar_width > 0:
+                    draw.rectangle([bar_left, bar_top, bar_left + bar_width, bar_bottom], fill=color)
+
+                # bar carries only color; points value is shown in the points column
+
+        return graph
+    
+    def new_draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
+        """Draw a legend for the top players or tribes.
+
+        Args:
+            top_type (str): "players" or "tribes"
+            image (Image): The base image to draw on.
+
+        Returns:
+            Image: The image with the legend drawn on it.
+        """
+        
+        legend_width = 2000
+
+        # create separate side image for legend that will be pasted together with map
+        legend_image = Image.new("RGBA", (legend_width, self.image.height), (0, 0, 0, 0))
+
+
+        if self.add_watermark:  
+            image = self.watermark("SirolfR")
+        
+        if self.add_current_date_time:
+            image = self.add_current_date_time()
+        
+        draw = ImageDraw.Draw(legend_image)
+        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
+
+        # draw_top 10 players or tribes
+        top_10_graph = self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points")
+        
+        # Paste the graph onto the legend image (use a 4-item box and pass mask to support transparency)
+        legend_image.paste(top_10_graph, (0, 0, top_10_graph.width, top_10_graph.height), top_10_graph)
+
+        # Combine legend with main image
+        combined_width = image.width + legend_image.width
+        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_image.paste(image, (0, 0))
+        combined_image.paste(legend_image, (image.width, 0))
+
+        self.image = combined_image
+
+        return self.image
+
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
                 
         legend_width = 1000
@@ -737,11 +880,11 @@ if __name__ == "__main__":
     map = Map(data_filter, max_coords=750)
     top_players_image = map.draw_top_players(center_text=True)
     top_players_image = map.crop_image(top_players_image)
-    top_players_image_with_legend = map.draw_legend(top_type="players")
+    top_players_image_with_legend = map.new_draw_legend(top_type="players")
     top_players_image_with_legend.show()
 
     top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
     top_tribes_image = map.crop_image(top_tribes_image)
-    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
+    top_tribes_image_with_legend = map.new_draw_legend(top_type="tribes")
     top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
     top_tribes_image_with_war.show()
