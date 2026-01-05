@@ -488,6 +488,13 @@ class Map:
             if bar_width > 0:
                 draw.rectangle([bar_left, bar_top, bar_left + bar_width, bar_bottom], fill=color)
 
+        if item_count > 0:
+            used_height = bar_bottom + 30
+        else:
+            used_height = line_y + self.font_size + 40
+        used_height = min(used_height, graph.height)
+        graph = graph.crop((0, 0, legend_width, used_height))
+
         return graph
     
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
@@ -504,12 +511,17 @@ class Map:
             image = self.add_current_date_time()
 
         # Build all graphs we want to show in order
-        graphs = [
+        graphs = []
+
+        graphs.extend([
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points"),
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="killall"),
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="villages"),
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="conquers"),
-        ]
+        ])
+
+        if top_type == "tribes":
+            graphs.append(self.draw_dominance_bar(legend_width=legend_width))
 
         total_graph_height = sum(g.height for g in graphs)
         legend_height = max(image.height, total_graph_height)
@@ -532,6 +544,87 @@ class Map:
         self.image = combined_image
 
         return self.image
+
+    def get_dominance_summary(self):
+        """Compute the current dominance leader and progress toward the 65% win condition."""
+        total_villages = len(self.village_df)
+        if total_villages == 0:
+            return None
+
+        villages_with_tribe = self.village_df.merge(
+            self.player_df[["playerid", "tribeid"]], on="playerid", how="left"
+        )
+
+        tribe_counts = villages_with_tribe.dropna(subset=["tribeid"]).groupby("tribeid")["villageid"].count()
+        if tribe_counts.empty:
+            return None
+
+        top_tribe_id = int(tribe_counts.idxmax())
+        top_village_count = int(tribe_counts.loc[top_tribe_id])
+        dominance_pct = (top_village_count / total_villages) * 100
+        threshold_pct = 65.0
+
+        tribe_row = self.tribe_df[self.tribe_df["tribeid"] == top_tribe_id]
+        tribe_tag = urllib.parse.unquote_plus(tribe_row["tag"].iloc[0]) if not tribe_row.empty else "?"
+        tribe_name = urllib.parse.unquote_plus(tribe_row["name"].iloc[0]) if not tribe_row.empty else ""
+
+        return {
+            "tribeid": top_tribe_id,
+            "tribe_tag": tribe_tag,
+            "tribe_name": tribe_name,
+            "villages": top_village_count,
+            "total": total_villages,
+            "dominance_pct": dominance_pct,
+            "threshold_pct": threshold_pct,
+        }
+
+    def draw_dominance_bar(self, legend_width: int = 1000):
+        """Draw a progress bar showing the leading tribe's dominance toward 65%."""
+
+        summary = self.get_dominance_summary()
+        bar_height = 250
+        graph = Image.new("RGBA", (legend_width, bar_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(graph)
+        draw.rectangle([0, 0, legend_width, bar_height], fill="#000000")
+
+        if summary is None:
+            draw.text((legend_width // 2, bar_height // 2), "No tribe data to compute dominance", fill=self.tw_color, font=self.font, anchor="mm")
+            return graph
+
+        color = self.color_manager.get_color_without_force(summary["tribeid"])
+
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 1.4))
+        draw.text((legend_width // 2, 24), "World Dominance", fill=self.tw_color, font=title_font, anchor="mt")
+
+        tribe_label = f"Leading tribe: [{summary['tribe_tag']}] {summary['tribe_name']}".strip()
+        draw.text((40, 90), tribe_label, fill=color, font=self.font, anchor="lt")
+
+        progress_text = f"{summary['villages']:,}/{summary['total']:,} villages"
+        draw.text((40, 150), progress_text, fill=self.tw_color, font=self.font, anchor="lt")
+
+        bar_left = 40
+        bar_right = legend_width - 40
+        bar_top = 200
+        bar_bottom = bar_top + 40
+        draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], outline=self.tw_color, fill="#1a1a1a")
+
+        max_width = bar_right - bar_left
+        fill_ratio = min(summary["dominance_pct"] / summary["threshold_pct"], 1.0)
+        fill_width = int(max_width * fill_ratio)
+        if fill_width > 0:
+            draw.rectangle([bar_left, bar_top, bar_left + fill_width, bar_bottom], fill=color)
+
+        draw.text((bar_right, bar_top - 10), f"{summary['threshold_pct']:.0f}% needed", fill=self.tw_color, font=self.font, anchor="rb")
+
+        current_pct_label = f"{summary['dominance_pct']:.1f}%"
+        label_x = bar_left + fill_width
+        label_x = min(max(label_x, bar_left + 10), bar_right - 10)
+        draw.text((label_x, bar_bottom + 8), current_pct_label, fill=self.tw_color, font=self.font, anchor="mt")
+
+        if summary["dominance_pct"] >= summary["threshold_pct"]:
+            draw.text((legend_width - 40, 80), "Threshold reached", fill=color, font=self.font, anchor="rt")
+
+        return graph
 
     def draw(self, village_df: DataFrame, field: str, size_multiplier: float = 1.0):
 
