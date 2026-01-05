@@ -312,151 +312,190 @@ class Map:
     def draw_graph(self, top_type: str = "players", graph_type: str = "points", specific: bool = False, legend_width: int = 1000):
         """Draw a graph of a specific statistic for the top players or tribes.
 
-        Args:
-            top_type (str): "players" or "tribes"
-            image (Image): The base image to draw on.
-
-        Returns:
-            Image: The image with the graph drawn on it.
+        Supported graphs:
+        - points (top 10 by points)
+        - killall (opponents defeated, colored by points ranking)
+        - villages (village counts of the top 10)
+        - conquers (past 72h conquers of the top 10)
         """
 
-        # The following graphs can be drawn:
-        # 1. Points for top 10
-        # 2. Top 10 opponents defeated
-        # 3. Number of villages of top 10
-        # 4. Number of conquers in past week
-
+        # Base list of top entities by points (used for colors and labels)
         if top_type == "players":
             if specific:
-                ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
-                names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
-                points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
+                base_ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
+                base_names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
+                base_points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
+                base_tags = None
             else:
-                ids = self.t10_players['playerid'].to_list()
-                names = self.t10_players['name'].to_list()
-                points = self.t10_players['points'].to_list()
+                base_ids = self.t10_players['playerid'].to_list()
+                base_names = self.t10_players['name'].to_list()
+                base_points = self.t10_players['points'].to_list()
+                base_tags = None
         elif top_type == "tribes":
             if specific:
-                ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
-                names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
-                tags = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['tag'].tolist()
-                points = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['points'].tolist()
+                base_ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
+                base_names = self.tribe_df[self.tribe_df['tribeid'].isin(base_ids)]['name'].tolist()
+                base_tags = self.tribe_df[self.tribe_df['tribeid'].isin(base_ids)]['tag'].tolist()
+                base_points = self.tribe_df[self.tribe_df['tribeid'].isin(base_ids)]['points'].tolist()
             else:
-                ids = self.t10_tribes['tribeid'].to_list()
-                names = self.t10_tribes['name'].to_list()
-                tags = self.t10_tribes['tag'].to_list()
-                points = self.t10_tribes['tribe_points'].to_list()
+                base_ids = self.t10_tribes['tribeid'].to_list()
+                base_names = self.t10_tribes['name'].to_list()
+                base_tags = self.t10_tribes['tag'].to_list()
+                base_points = self.t10_tribes['tribe_points'].to_list()
         else:
             raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
 
-        graph_height = max(600, (len(ids) + 3) * self.font_size + 200)
+        # Precompute point-colors so other graphs can borrow the same palette
+        point_color_lookup = {pid: self.color_manager.get_color(pid) for pid in base_ids}
+
+        graph_items = []  # list of {id, name, value, color}
+        title = ""
+
+        if graph_type == "points":
+            title = f"Top {top_type.capitalize()} Points - {self.data_filter.world_id}"
+            for idx, pid in enumerate(base_ids):
+                if top_type == "tribes":
+                    raw_name = f"{urllib.parse.unquote_plus(base_names[idx])} [{urllib.parse.unquote_plus(base_tags[idx])}]"
+                else:
+                    raw_name = urllib.parse.unquote_plus(base_names[idx])
+                graph_items.append({
+                    "id": pid,
+                    "name": raw_name,
+                    "value": base_points[idx],
+                    "color": point_color_lookup.get(pid)
+                })
+
+        elif graph_type == "killall":
+            title = f"Opponents Defeated - {self.data_filter.world_id}"
+            if top_type == "players":
+                kill_df = self.data_filter.get_top_10_killall_players()
+                for row in kill_df.itertuples(index=False):
+                    pid = getattr(row, "playerid")
+                    name_val = urllib.parse.unquote_plus(getattr(row, "name"))
+                    defeated = int(getattr(row, "units_defeated", 0))
+                    color = point_color_lookup.get(pid, self.color_manager.get_color_without_force(pid))
+                    graph_items.append({"id": pid, "name": name_val, "value": defeated, "color": color})
+            else:
+                kill_df = self.data_filter.get_top_10_killall_tribes()
+                for row in kill_df.itertuples(index=False):
+                    tid = getattr(row, "tribeid")
+                    name_val = urllib.parse.unquote_plus(getattr(row, "name")) if hasattr(row, "name") else urllib.parse.unquote_plus(getattr(row, "tag"))
+                    tag_val = urllib.parse.unquote_plus(getattr(row, "tag")) if hasattr(row, "tag") else ""
+                    defeated = int(getattr(row, "units_defeated", 0))
+                    display_name = f"{name_val} [{tag_val}]" if tag_val else name_val
+                    color = point_color_lookup.get(tid, self.color_manager.get_color_without_force(tid))
+                    graph_items.append({"id": tid, "name": display_name, "value": defeated, "color": color})
+            graph_items.sort(key=lambda x: x["value"], reverse=True)
+
+        elif graph_type == "villages":
+            title = f"Villages - Top {top_type.capitalize()}"
+            if top_type == "players":
+                village_counts = self.data_filter.get_t10_player_villages()["playerid"].value_counts()
+                for idx, pid in enumerate(base_ids):
+                    raw_name = urllib.parse.unquote_plus(base_names[idx])
+                    graph_items.append({
+                        "id": pid,
+                        "name": raw_name,
+                        "value": int(village_counts.get(pid, 0)),
+                        "color": point_color_lookup.get(pid)
+                    })
+            else:
+                village_counts = self.data_filter.get_t10_tribe_villages()["tribeid"].value_counts()
+                for idx, tid in enumerate(base_ids):
+                    raw_name = f"{urllib.parse.unquote_plus(base_names[idx])} [{urllib.parse.unquote_plus(base_tags[idx])}]"
+                    graph_items.append({
+                        "id": tid,
+                        "name": raw_name,
+                        "value": int(village_counts.get(tid, 0)),
+                        "color": point_color_lookup.get(tid)
+                    })
+            graph_items.sort(key=lambda x: x["value"], reverse=True)
+
+        elif graph_type == "conquers":
+            title = f"Conquers (72h) - Top {top_type.capitalize()}"
+            if top_type == "players":
+                conquers_df = self.data_filter.get_past_day_t10_conquers_players()
+                counts = conquers_df["playerid"].value_counts() if not conquers_df.empty else {}
+                for idx, pid in enumerate(base_ids):
+                    raw_name = urllib.parse.unquote_plus(base_names[idx])
+                    graph_items.append({
+                        "id": pid,
+                        "name": raw_name,
+                        "value": int(counts.get(pid, 0)),
+                        "color": point_color_lookup.get(pid)
+                    })
+            else:
+                conquers_df = self.data_filter.get_past_day_t10_conquers_tribes()
+                counts = conquers_df["tribeid"].value_counts() if not conquers_df.empty else {}
+                for idx, tid in enumerate(base_ids):
+                    raw_name = f"{urllib.parse.unquote_plus(base_names[idx])} [{urllib.parse.unquote_plus(base_tags[idx])}]"
+                    graph_items.append({
+                        "id": tid,
+                        "name": raw_name,
+                        "value": int(counts.get(tid, 0)),
+                        "color": point_color_lookup.get(tid)
+                    })
+            graph_items.sort(key=lambda x: x["value"], reverse=True)
+
+        else:
+            raise ValueError("Invalid graph_type. Expected 'points', 'killall', 'villages', or 'conquers'.")
+
+        item_count = len(graph_items)
+        graph_height = max(450, (item_count + 2) * self.font_size + 75)
         graph = Image.new("RGBA", (legend_width, graph_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(graph)
 
-        if graph_type == "points":
-            title_font_size = int(self.font_size * 1.6)
-            title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
-            title_y = 10
-            title = f"Top {top_type.capitalize()} Points - {self.data_filter.world_id}"
-            draw.text((legend_width // 2, title_y), title, fill=self.tw_color, font=title_font, anchor="mt")
+        title_font_size = int(self.font_size * 1.6)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+        title_y = 10
+        draw.text((legend_width // 2, title_y), title, fill=self.tw_color, font=title_font, anchor="mt")
 
-            line_y = title_y + title_font_size + 8
-            draw.line([30, line_y, legend_width - 30, line_y], fill=self.tw_color, width=3)
+        line_y = title_y + title_font_size + 8
+        draw.line([30, line_y, legend_width - 30, line_y], fill=self.tw_color, width=3)
 
-            max_points = max(points) if points else 1
+        max_value = max((item["value"] for item in graph_items), default=1)
 
-            # column layout: rank | name | points | bar
-            rank_x = 40
-            name_x = 100
-            points_x = 520
-            bar_left = 750
-            bar_right = legend_width - 40
-            bar_max_width = max(1, bar_right - bar_left)
-            bar_height = int(self.font_size * 0.8)
+        # column layout: rank | name | value | bar
+        rank_x = 40
+        name_x = 100
+        points_x = 520
+        bar_left = 820
+        bar_right = legend_width - 40
+        bar_max_width = max(1, bar_right - bar_left)
+        bar_height = int(self.font_size * 0.8)
 
-            base_y = line_y + 8
+        base_y = line_y + 8
 
-            for i in range(0, len(ids)):
-                row_y = base_y + i * self.font_size
-                bar_top = row_y + int(self.font_size * 0.2)
-                bar_bottom = bar_top + bar_height
+        for i, item in enumerate(graph_items):
+            row_y = base_y + i * self.font_size
+            bar_top = row_y + int(self.font_size * 0.2)
+            bar_bottom = bar_top + bar_height
 
-                # rank column with small color swatch
-                color = self.color_manager.get_color(ids[i])
-                draw.rectangle([10, row_y, 30, row_y + 40], fill=color)
-                draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
+            color = item.get("color", self.tw_color)
+            draw.rectangle([10, row_y, 30, row_y + 40], fill=color)
+            draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
 
-                # name column with truncation
-                if top_type == "tribes":
-                    raw_name = f"{urllib.parse.unquote_plus(names[i])} [{urllib.parse.unquote_plus(tags[i])}]"
-                    max_name_len = 18
-                else:
-                    raw_name = urllib.parse.unquote_plus(names[i])
-                    max_name_len = 18
-                name_text = raw_name if len(raw_name) <= max_name_len else raw_name[:max_name_len - 3] + "..."
-                draw.text((name_x, row_y), name_text, fill=color, font=self.font, anchor="lt")
+            raw_name = item["name"]
+            max_name_len = 18
+            name_text = raw_name if len(raw_name) <= max_name_len else raw_name[:max_name_len - 3] + "..."
+            draw.text((name_x, row_y), name_text, fill=color, font=self.font, anchor="lt")
 
-                # points column
-                value_label = f"{points[i]:,}"
-                draw.text((points_x, row_y), value_label, fill=self.tw_color, font=self.font, anchor="lt")
+            value_label = f"{item['value']:,}"
+            draw.text((points_x, row_y), value_label, fill=self.tw_color, font=self.font, anchor="lt")
 
-                # draw proportional bar background and fill
-                draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], fill="#1f1f1f")
-                bar_width = int(bar_max_width * (points[i] / max_points)) if max_points else 0
-                if bar_width > 0:
-                    draw.rectangle([bar_left, bar_top, bar_left + bar_width, bar_bottom], fill=color)
-
-                # bar carries only color; points value is shown in the points column
+            draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], fill="#1f1f1f")
+            bar_width = int(bar_max_width * (item["value"] / max_value)) if max_value else 0
+            if bar_width > 0:
+                draw.rectangle([bar_left, bar_top, bar_left + bar_width, bar_bottom], fill=color)
 
         return graph
     
-    def new_draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
-        """Draw a legend for the top players or tribes.
-
-        Args:
-            top_type (str): "players" or "tribes"
-            image (Image): The base image to draw on.
-
-        Returns:
-            Image: The image with the legend drawn on it.
-        """
-        
+    def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
+        """Draw a stacked legend with all bar charts for the top players or tribes."""
         legend_width = 2000
 
-        # create separate side image for legend that will be pasted together with map
-        legend_image = Image.new("RGBA", (legend_width, self.image.height), (0, 0, 0, 0))
-
-
-        if self.add_watermark:  
-            image = self.watermark("SirolfR")
-        
-        if self.add_current_date_time:
-            image = self.add_current_date_time()
-        
-        draw = ImageDraw.Draw(legend_image)
-        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
-
-        # draw_top 10 players or tribes
-        top_10_graph = self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points")
-        
-        # Paste the graph onto the legend image (use a 4-item box and pass mask to support transparency)
-        legend_image.paste(top_10_graph, (0, 0, top_10_graph.width, top_10_graph.height), top_10_graph)
-
-        # Combine legend with main image
-        combined_width = image.width + legend_image.width
-        combined_image = Image.new("RGBA", (combined_width, image.height))
-        combined_image.paste(image, (0, 0))
-        combined_image.paste(legend_image, (image.width, 0))
-
-        self.image = combined_image
-
-        return self.image
-
-    def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
-                
-        legend_width = 1000
-        # create separate side image for legend that will be pasted together with map
-        legend_image = Image.new("RGBA", (legend_width, self.image.height), (0, 0, 0, 0))
+        if image is None:
+            image = self.image
 
         if self.add_watermark:  
             image = self.watermark("SirolfR")
@@ -464,178 +503,29 @@ class Map:
         if self.add_current_date_time:
             image = self.add_current_date_time()
 
+        # Build all graphs we want to show in order
+        graphs = [
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points"),
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="killall"),
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="villages"),
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="conquers"),
+        ]
+
+        total_graph_height = sum(g.height for g in graphs)
+        legend_height = max(image.height, total_graph_height)
+
+        legend_image = Image.new("RGBA", (legend_width, legend_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(legend_image)
+        draw.rectangle([0, 0, legend_width, legend_height], fill="#000000")
 
-        if top_type == "players":
-            if specific:
-                ids = self.player_df[self.player_df['name'].isin(self.player_list)]['playerid'].tolist()
-                names = self.player_df[self.player_df['name'].isin(self.player_list)]['name'].tolist()
-                points = self.player_df[self.player_df['name'].isin(self.player_list)]['points'].tolist()
-            else:
-                ids = self.t10_players['playerid'].to_list()
-                names = self.t10_players['name'].to_list()
-                points = self.t10_players['points'].to_list()
-        elif top_type == "tribes":
-            if specific:
-                ids = self.tribe_df[self.tribe_df['tribeid'].isin(self.tribe_list)]['tribeid'].tolist()
-                names = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['name'].tolist()
-                tags = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['tag'].tolist()
-                points = self.tribe_df[self.tribe_df['tribeid'].isin(ids)]['points'].tolist()
-            else:
-                ids = self.t10_tribes['tribeid'].to_list()
-                names = self.t10_tribes['name'].to_list()
-                tags = self.t10_tribes['tag'].to_list()
-                points = self.t10_tribes['tribe_points'].to_list()
-        else:
-            raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
+        current_y = 0
+        for g in graphs:
+            legend_image.paste(g, (0, current_y, g.width, current_y + g.height), g)
+            current_y += g.height
 
-        # Add background
-        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
-
-        if specific:
-            draw.text((10, 60), "Top Tribes", fill=self.tw_color, font=self.font, anchor="lt")
-            
-            for i in range(0, len(ids)):
-                id = ids[i]
-                draw.text((50, (i + 1) * self.font_size + 30), f"{i + 1}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.rectangle([0, (i + 1) * self.font_size + 30, 20, (i + 1) * self.font_size + 50], fill=self.color_manager.get_color(id))
-        else:
-            # Create a larger font for the title
-            title_font_size = int(self.font_size * 1.5)  # 50% larger than normal font
-            title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
-
-            draw.text((legend_width // 2, 60), f"Top {top_type.capitalize()} - {self.data_filter.world_id}", fill=self.tw_color, font=title_font, anchor="mt")
-
-            # Include horizontal line
-            draw.line([0, self.font_size * 1.5 + 65, legend_width, self.font_size * 1.5 + 65], fill=self.tw_color, width=3)
-
-            for i in range(0, len(ids)):
-                if top_type == "tribes":
-                    name_with_tag = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}  [{urllib.parse.unquote_plus(tags[i])}]"
-                    if len(name_with_tag) > 23:
-                        name_with_tag = name_with_tag[:23] + "..."
-                    color = self.color_manager.get_color(ids[i])
-                    draw.text((75, (i + 1) * self.font_size + 120), name_with_tag, fill=color, font=self.font, anchor="lt")
-                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
-                else:
-                    name_text = f"{i + 1:>2}. {urllib.parse.unquote_plus(names[i])}"
-                    if len(name_text) > 15:
-                        name_text = name_text[:15] + "..."
-                    color = self.color_manager.get_color(ids[i])
-                    
-                    draw.text((75, (i + 1) * self.font_size + 120), name_text, fill=color, font=self.font, anchor="lt")
-                    draw.text((575, (i + 1) * self.font_size + 120), f"{points[i]:,} points", fill=self.tw_color, font=self.font, anchor="lt")
-
-                draw.rectangle([10, (i + 1) * self.font_size + 120, 50, (i + 1) * self.font_size + 160], fill=self.color_manager.get_color(ids[i]))
-
-        # add another horizontal line at the end
-        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
-
-        # Create a list of top 10 kill all players/tribes in the past day
-        if top_type == "players":
-            top_10_killall = self.data_filter.get_top_10_killall_players()
-        elif top_type == "tribes":
-            top_10_killall = self.data_filter.get_top_10_killall_tribes()
-        else:
-            raise ValueError("Invalid top_type. Expected 'players' or 'tribes'.")
-        
-        draw.text((0, (len(ids) + 2) * self.font_size + 160), f"Top 10 Opponents Defeated {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
-        
-        for i in range(0, len(top_10_killall)):
-            id = top_10_killall.iloc[i]["tribeid"] if top_type == "tribes" else top_10_killall.iloc[i]["playerid"]
-            if top_type == "tribes":
-                tag = top_10_killall.iloc[i]["tag"]
-            else:
-                tag = top_10_killall.iloc[i]["name"]
-            defeated = f"{top_10_killall.iloc[i]['units_defeated']:,}"
-            color = self.color_manager.get_color_without_force(id)
-            draw.text((50, (len(ids) + 3 + i) * self.font_size + 175), f"{i + 1:>2}.", fill=color, font=self.font, anchor="lt")
-            draw.text((110, (len(ids) + 3 + i) * self.font_size + 175), f"{urllib.parse.unquote_plus(str(tag))}", fill=color, font=self.font, anchor="lt")
-            draw.text((500, (len(ids) + 3 + i) * self.font_size + 175), f"{str(defeated)} defeated", fill=color, font=self.font, anchor="lt")
-
-        # another horizontal line at the end
-        draw.line([0, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220, legend_width, (len(ids) + 4 + len(top_10_killall)) * self.font_size + 220], fill=self.tw_color, width=3)
-        
-        # Number of villages of the top type
-        draw.text((0, (len(ids) + 5 + len(top_10_killall)) * self.font_size + 230), f"Number of Villages of Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
-
-        for i in range(0, len(ids)):
-            id = ids[i]
-            offset = 1450
-            if top_type == "tribes":
-                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
-                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
-                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
-                if len(display_name) > 20:
-                    display_name = display_name[:20] + "..."
-                color = self.color_manager.get_color(id)
-                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
-            else:
-                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
-                player_tribeid = self.player_df[self.player_df['playerid'] == id]['tribeid'].values[0]
-                tag = self.tribe_df[self.tribe_df['tribeid'] == player_tribeid]['tag'].values[0] if player_tribeid in self.tribe_df['tribeid'].values else "No Tribe"
-
-                display_name = urllib.parse.unquote_plus(name)
-                if len(display_name) > 20:
-                    display_name = display_name[:20] + "..."
-                color = self.color_manager.get_color(id)
-                draw.text((50, (i + 1) * self.font_size + offset), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((115, (i + 1) * self.font_size + offset), display_name, fill=color, font=self.font, anchor="lt")
-            
-            if top_type == "tribes":
-                number_of_villages = len(self.data_filter.get_t10_tribe_villages()[self.data_filter.get_t10_tribe_villages()['tribeid'] == id]) if not specific else len(self.village_df[self.village_df['tribeid'] == id])
-            else:
-                number_of_villages = len(self.data_filter.get_t10_player_villages()[self.data_filter.get_t10_player_villages()['playerid'] == id]) if not specific else len(self.village_df[self.village_df['playerid'] == id])
-
-                # write the players tribe tag
-                draw.text((500, (i + 1) * self.font_size + offset), f"{tag}", fill=self.tw_color, font=self.font, anchor="lt")
-
-            
-
-            draw.text((650, (i + 1) * self.font_size + offset), f"{number_of_villages} villages", fill=self.tw_color, font=self.font, anchor="lt")
-
-        # draw another horizontal line at the end
-        draw.line([0, 2000, legend_width, 2000], fill=self.tw_color, width=3)
-
-        # total number of conquers of the top type in the past day
-
-        offset = 2050
-
-        draw.text((0, offset), f"Number of Conquers (72h) - Top {top_type.capitalize()}", fill=self.tw_color, font=self.font, anchor="lt")
-        
-        for i in range(0, len(ids)):
-            id = ids[i]
-            
-            if top_type == "tribes":
-                name = self.tribe_df[self.tribe_df['tribeid'] == id]['name'].values[0]
-                tag = self.tribe_df[self.tribe_df['tribeid'] == id]['tag'].values[0]
-                display_name = f"{urllib.parse.unquote_plus(name)}  [{urllib.parse.unquote_plus(tag)}]"
-                if len(display_name) > 20:
-                    display_name = display_name[:20] + "..."
-                color = self.color_manager.get_color(id)
-                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
-                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_tribe_ids([id]))
-            else:
-                name = self.player_df[self.player_df['playerid'] == id]['name'].values[0]
-                display_name = urllib.parse.unquote_plus(name)
-                if len(display_name) > 20:
-                    display_name = display_name[:20] + "..."
-                color = self.color_manager.get_color(id)
-                draw.text((50, (i + 1) * self.font_size + offset + 10), f"{i + 1}.", fill=color, font=self.font, anchor="lt")
-                draw.text((115, (i + 1) * self.font_size + offset + 10), display_name, fill=color, font=self.font, anchor="lt")
-            
-                number_of_conquers = len(self.data_filter.get_past_day_conquers_by_player_names([name]))
-
-            draw.text((650, (i + 1) * self.font_size + offset + 10), f"{number_of_conquers} conquers", fill=self.tw_color, font=self.font, anchor="lt")
-        
-        # end horizontal line
-        draw.line([0, (len(ids) + 1) * self.font_size + 150, legend_width, (len(ids) + 1) * self.font_size + 150], fill=self.tw_color, width=3)
-
-        # Combine legend with main image
         combined_width = image.width + legend_image.width
-        combined_image = Image.new("RGBA", (combined_width, image.height))
+        combined_height = max(image.height, legend_height)
+        combined_image = Image.new("RGBA", (combined_width, combined_height))
         combined_image.paste(image, (0, 0))
         combined_image.paste(legend_image, (image.width, 0))
 
@@ -880,11 +770,11 @@ if __name__ == "__main__":
     map = Map(data_filter, max_coords=750)
     top_players_image = map.draw_top_players(center_text=True)
     top_players_image = map.crop_image(top_players_image)
-    top_players_image_with_legend = map.new_draw_legend(top_type="players")
+    top_players_image_with_legend = map.draw_legend(top_type="players")
     top_players_image_with_legend.show()
 
     top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
     top_tribes_image = map.crop_image(top_tribes_image)
-    top_tribes_image_with_legend = map.new_draw_legend(top_type="tribes")
+    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
     top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
     top_tribes_image_with_war.show()
