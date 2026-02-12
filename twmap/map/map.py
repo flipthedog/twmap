@@ -20,7 +20,14 @@ from scipy.spatial import ConvexHull
 
 class Map:
 
-    def __init__(self, data_filter: DataFilter, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300):
+    # Output resolution presets (16:9 aspect ratio)
+    OUTPUT_RESOLUTIONS = {
+        "2K": {"width": 2560, "height": 1440},      # 2560x1440 (16:9)
+        "4K": {"width": 3840, "height": 2160},      # 3840x2160 (16:9)
+        "8K": {"width": 7680, "height": 4320},      # 7680x4320 (16:9)
+    }
+
+    def __init__(self, data_filter: DataFilter, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300, output_resolution: str = "2K", apply_aspect_ratio: bool = True, image_type: str = "tribe", server: str = None, world: str = None):
         """Load it with TW data and create a map
 
         Args:
@@ -28,6 +35,11 @@ class Map:
             player_df (DataFrame): DataFrame containing player data
             tribe_df (DataFrame): DataFrame containing tribe data
             conquer_df (DataFrame): DataFrame containing conquer data
+            output_resolution (str): Target output resolution ("2K", "4K", or "8K")
+            apply_aspect_ratio (bool): Whether to apply aspect ratio correction to final images
+            image_type (str): "player" for player timelapse or "tribe" for tribe timelapse
+            server (str): Game server code (e.g., "en", "de", "br") - extracted from data_filter if not provided
+            world (str): World/game ID (e.g., "146", "147") - extracted from data_filter if not provided
         """
         self.data_filter = data_filter
 
@@ -38,6 +50,8 @@ class Map:
         
         self.printed_datetime = data_filter.printed_timestamp
         self.printed_world = data_filter.world_id
+        self.server = server if server else getattr(data_filter, 'server', 'unknown')
+        self.world = world if world else str(self.printed_world) if self.printed_world else 'unknown'
         
         if self.printed_datetime is None:
             self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
@@ -79,6 +93,13 @@ class Map:
         self.spacing = 1
 
         self.player_village_size_multiplier = 2.0
+
+        # Output resolution configuration
+        self.output_resolution = output_resolution
+        self.target_width = self.OUTPUT_RESOLUTIONS[output_resolution]["width"]
+        self.target_height = self.OUTPUT_RESOLUTIONS[output_resolution]["height"]
+        self.apply_aspect_ratio = apply_aspect_ratio
+        self.image_type = image_type
 
         self.image_height = self.world_height * (self.cell_size + self.spacing)
         self.image_width = self.world_width * (self.cell_size + self.spacing)
@@ -210,9 +231,10 @@ class Map:
         pairwise = war_stats.get("pairwise", pd.DataFrame())
         totals = war_stats.get("totals", pd.DataFrame())
 
-
         if image is None:
             image = self.image
+        else:
+            self.image = image
 
         legend_width = 1000
         legend_image = Image.new("RGBA", (legend_width, image.height), (0, 0, 0, 0))
@@ -226,6 +248,9 @@ class Map:
             combined_image.paste(image, (0, 0))
             combined_image.paste(legend_image, (image.width, 0))
             self.image = combined_image
+            # Apply aspect ratio correction if enabled
+            if self.apply_aspect_ratio:
+                self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
             return self.image
 
         draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
@@ -306,6 +331,10 @@ class Map:
         combined_image.paste(legend_image, (image.width, 0))
 
         self.image = combined_image
+        
+        # Apply aspect ratio correction if enabled
+        if self.apply_aspect_ratio:
+            self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
 
         return self.image
 
@@ -497,12 +526,39 @@ class Map:
 
         return graph
     
+    def add_title_to_image(self, image: Image) -> Image:
+        """
+        Add a title at the top of the image, drawn directly on the map.
+        
+        Args:
+            image (Image): The image to add the title to
+            
+        Returns:
+            Image: Image with title added
+        """
+        self.image = image
+        draw = ImageDraw.Draw(self.image)
+        
+        # Determine the label for the image type
+        type_label = "Players" if self.image_type == "player" else "Tribes"
+        title_text = f"{self.server.upper()}{self.world} - Top 10 {type_label}"
+        
+        # Draw the title text at the top of the map
+        title_font_size = int(self.font_size * 2.2)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+        
+        draw.text((self.image.width // 2, 50), title_text, fill=self.tw_color, font=title_font, anchor="mm")
+        
+        return self.image
+
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
         """Draw a stacked legend with all bar charts for the top players or tribes."""
         legend_width = 2000
 
         if image is None:
             image = self.image
+        else:
+            self.image = image
 
         if self.add_watermark:  
             image = self.watermark("SirolfR")
@@ -542,6 +598,10 @@ class Map:
         combined_image.paste(legend_image, (image.width, 0))
 
         self.image = combined_image
+        
+        # Apply aspect ratio correction if enabled
+        if self.apply_aspect_ratio:
+            self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
 
         return self.image
 
@@ -619,7 +679,7 @@ class Map:
         current_pct_label = f"{summary['dominance_pct']:.1f}%"
         label_x = bar_left + fill_width
         label_x = min(max(label_x, bar_left + 10), bar_right - 10)
-        draw.text((label_x, bar_bottom + 8), current_pct_label, fill=self.tw_color, font=self.font, anchor="mt")
+        draw.text((label_x, bar_top - 10), current_pct_label, fill=self.tw_color, font=self.font, anchor="mb")
 
         if summary["dominance_pct"] >= summary["threshold_pct"]:
             draw.text((legend_width - 40, 80), "Threshold reached", fill=color, font=self.font, anchor="rt")
@@ -656,6 +716,7 @@ class Map:
         
         self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
 
+        self.image = self.add_title_to_image(self.image)
         return self.image
 
     def draw_grid(self, image: Image, color: str, grid_spacing: int):
@@ -684,6 +745,7 @@ class Map:
         return self.image
         
     def local_save(self, filename: str):
+        """Save the image to file."""
         self.image.save(filename, quality=95)
 
     def draw_zones_of_control(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
@@ -829,6 +891,71 @@ class Map:
 
         return self.image
 
+    def apply_aspect_ratio_correction(self, image: Image, image_type: str = "tribe") -> Image:
+        """
+        Apply aspect ratio correction to image (16:9 aspect ratio).
+        
+        Args:
+            image (Image): The image to correct
+            image_type (str): Either "player" (uses 2K) or "tribe" (uses 4K)
+            
+        Returns:
+            Image: Corrected image with proper dimensions (16:9 aspect ratio)
+        """
+        # Determine target resolution based on image type
+        if image_type == "player":
+            target_res = "2K"
+        elif image_type == "tribe":
+            target_res = "4K"
+        else:
+            target_res = self.output_resolution
+        
+        target_width = self.OUTPUT_RESOLUTIONS[target_res]["width"]
+        target_height = self.OUTPUT_RESOLUTIONS[target_res]["height"]
+        
+        # Resize to fit the target resolution maintaining aspect ratio where possible
+        # If image is wider than target, scale by width. Otherwise scale by height.
+        aspect_ratio = image.width / image.height
+        target_aspect = target_width / target_height
+        
+        if aspect_ratio > target_aspect:
+            # Image is wider, scale by width
+            new_width = target_width
+            new_height = int(target_width / aspect_ratio)
+        else:
+            # Image is narrower or equal, scale by height
+            new_height = target_height
+            new_width = int(target_height * aspect_ratio)
+        
+        # Resize image with high-quality resampling
+        scaled_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+        
+        # Create a new image with exact target dimensions and black padding
+        final_image = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 255))
+        
+        # Center the scaled image on the canvas
+        x_offset = (target_width - new_width) // 2
+        y_offset = (target_height - new_height) // 2
+        
+        final_image.paste(scaled_image, (x_offset, y_offset), scaled_image)
+        
+        logging.info(f"Applied aspect ratio correction to {target_res} ({target_width}x{target_height}) for {image_type}")
+        
+        return final_image
+
+    def finalize_youtube_image(self, image: Image, image_type: str = "tribe") -> Image:
+        """
+        Finalize image for YouTube by ensuring proper resolution and aspect ratio.
+        
+        Args:
+            image (Image): The image to finalize
+            image_type (str): Either "player" or "tribe"
+            
+        Returns:
+            Image: YouTube-ready image
+        """
+        return self.scale_image_to_youtube_resolution(image, image_type)
+
 if __name__ == "__main__":
     from twmap.snapshot.datafilter import DataFilter
     from twmap.snapshot.dataloader import DataLoader
@@ -860,14 +987,19 @@ if __name__ == "__main__":
 
     data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
 
-    map = Map(data_filter, max_coords=750)
+    # Player timelapse - 2K resolution with aspect ratio correction
+    map = Map(data_filter, max_coords=750, output_resolution="2K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
     top_players_image = map.draw_top_players(center_text=True)
     top_players_image = map.crop_image(top_players_image)
     top_players_image_with_legend = map.draw_legend(top_type="players")
     top_players_image_with_legend.show()
+    map.local_save("outputs/en146/top_players.png")
 
+    # Tribe timelapse - 4K resolution with aspect ratio correction
+    map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
     top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
     top_tribes_image = map.crop_image(top_tribes_image)
     top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
     top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
     top_tribes_image_with_war.show()
+    map.local_save("outputs/en146/top_tribes_with_war.png")
