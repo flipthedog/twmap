@@ -89,7 +89,7 @@ class Map:
         
         self.zoom = 3
 
-        self.cell_size = 4
+        self.cell_size = 5
         self.spacing = 1
 
         self.player_village_size_multiplier = 2.0
@@ -171,7 +171,7 @@ class Map:
             self.draw_grid(self.image, self.grid_color, 100)
             
         if self.add_watermark:
-            self.watermark("SirolfR")
+            self.watermark("@tw-timelapse")
         
         if self.add_current_date_time:
             self.add_current_date_time()
@@ -331,10 +331,6 @@ class Map:
         combined_image.paste(legend_image, (image.width, 0))
 
         self.image = combined_image
-        
-        # Apply aspect ratio correction if enabled
-        if self.apply_aspect_ratio:
-            self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
 
         return self.image
 
@@ -470,7 +466,7 @@ class Map:
             raise ValueError("Invalid graph_type. Expected 'points', 'killall', 'villages', or 'conquers'.")
 
         item_count = len(graph_items)
-        graph_height = max(450, (item_count + 2) * self.font_size + 75)
+        graph_height = max(800, (item_count + 10) * self.font_size + 200)
         graph = Image.new("RGBA", (legend_width, graph_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(graph)
 
@@ -552,19 +548,21 @@ class Map:
         return self.image
 
     def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
-        """Draw a stacked legend with all bar charts for the top players or tribes."""
-        legend_width = 2000
-
+        """Draw a stacked legend with all bar charts for the top players or tribes on the left side of the map."""
+        
         if image is None:
             image = self.image
         else:
             self.image = image
 
         if self.add_watermark:  
-            image = self.watermark("SirolfR")
+            image = self.watermark("@tw-timelapse")
         
         if self.add_current_date_time:
             image = self.add_current_date_time()
+
+        # Use a fixed width for the legend
+        legend_width = 1600
 
         # Build all graphs we want to show in order
         graphs = []
@@ -576,8 +574,7 @@ class Map:
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="conquers"),
         ])
 
-        if top_type == "tribes":
-            graphs.append(self.draw_dominance_bar(legend_width=legend_width))
+        graphs.append(self.draw_dominance_bar(legend_width=legend_width))
 
         total_graph_height = sum(g.height for g in graphs)
         legend_height = max(image.height, total_graph_height)
@@ -586,32 +583,39 @@ class Map:
         draw = ImageDraw.Draw(legend_image)
         draw.rectangle([0, 0, legend_width, legend_height], fill="#000000")
 
-        current_y = 0
+        # Space graphs evenly across the available height (including top and bottom margins)
+        num_graphs = len(graphs)
+        if num_graphs > 0:
+            available_height = legend_height - total_graph_height
+            spacing = available_height // (num_graphs + 1)
+        else:
+            spacing = 0
+        
+        current_y = spacing
         for g in graphs:
             legend_image.paste(g, (0, current_y, g.width, current_y + g.height), g)
-            current_y += g.height
+            current_y += g.height + spacing
 
         combined_width = image.width + legend_image.width
         combined_height = max(image.height, legend_height)
         combined_image = Image.new("RGBA", (combined_width, combined_height))
-        combined_image.paste(image, (0, 0))
-        combined_image.paste(legend_image, (image.width, 0))
+        # Legend on left, map on right
+        combined_image.paste(legend_image, (0, 0))
+        combined_image.paste(image, (legend_image.width, 0))
 
         self.image = combined_image
-        
-        # Apply aspect ratio correction if enabled
-        if self.apply_aspect_ratio:
-            self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
 
         return self.image
 
     def get_dominance_summary(self):
         """Compute the current dominance leader and progress toward the 65% win condition."""
-        total_villages = len(self.village_df)
+        # Only count player-owned villages (exclude barbarians with playerid 0)
+        player_villages = self.village_df[self.village_df['playerid'] != 0]
+        total_villages = len(player_villages)
         if total_villages == 0:
             return None
 
-        villages_with_tribe = self.village_df.merge(
+        villages_with_tribe = player_villages.merge(
             self.player_df[["playerid", "tribeid"]], on="playerid", how="left"
         )
 
@@ -642,7 +646,7 @@ class Map:
         """Draw a progress bar showing the leading tribe's dominance toward 65%."""
 
         summary = self.get_dominance_summary()
-        bar_height = 250
+        bar_height = 320
         graph = Image.new("RGBA", (legend_width, bar_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(graph)
         draw.rectangle([0, 0, legend_width, bar_height], fill="#000000")
@@ -677,9 +681,7 @@ class Map:
         draw.text((bar_right, bar_top - 10), f"{summary['threshold_pct']:.0f}% needed", fill=self.tw_color, font=self.font, anchor="rb")
 
         current_pct_label = f"{summary['dominance_pct']:.1f}%"
-        label_x = bar_left + fill_width
-        label_x = min(max(label_x, bar_left + 10), bar_right - 10)
-        draw.text((label_x, bar_top - 10), current_pct_label, fill=self.tw_color, font=self.font, anchor="mb")
+        draw.text((bar_left, bar_bottom + 10), current_pct_label, fill=self.tw_color, font=self.font, anchor="lt")
 
         if summary["dominance_pct"] >= summary["threshold_pct"]:
             draw.text((legend_width - 40, 80), "Threshold reached", fill=color, font=self.font, anchor="rt")
