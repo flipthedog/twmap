@@ -95,7 +95,7 @@ process_world() {
      -b:v 12M \
      -allow_sw 1 \
      -movflags +faststart \
-     -vf "hqdn3d=1:0.8:2:1.5,unsharp=5:5:1.0:5:5:0.0" \
+     -vf "eq=saturation=1.1:contrast=1.1" \
      -pix_fmt yuv420p ${OUTPUT_DIR}/${WORLD_ID}_player_output.mp4 \
      -y -loglevel error
     

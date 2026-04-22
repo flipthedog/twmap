@@ -556,7 +556,7 @@ class Map:
             self.image = image
 
         if self.add_watermark:  
-            image = self.watermark("@tw-timelapse")
+            image = self.watermark("youtube.com/@tw-timelapse")
         
         if self.add_current_date_time:
             image = self.add_current_date_time()
@@ -735,15 +735,19 @@ class Map:
     
     def add_current_date_time(self):
         draw = ImageDraw.Draw(self.image)
+        date_time_font_size = int(self.font_size * 2.0)
+        date_time_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", date_time_font_size)
         if self.printed_world:
-            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC - " + self.printed_world, fill=self.tw_color, font=self.font, anchor="lb")
+            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC - " + self.printed_world, fill=self.tw_color, font=date_time_font, anchor="lb")
         else:
-            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=self.font, anchor="lb")
+            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=date_time_font, anchor="lb")
         return self.image
 
     def watermark(self, text: str):
         draw = ImageDraw.Draw(self.image)
-        draw.text((self.image.width - 10, self.image.height - 10), text, fill=self.tw_color, font=self.font, anchor="rb")
+        watermark_font_size = int(self.font_size * 2)
+        watermark_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", watermark_font_size)
+        draw.text((self.image.width - 10, self.image.height - 10), text, fill=self.tw_color, font=watermark_font, anchor="rb")
         return self.image
         
     def local_save(self, filename: str):
