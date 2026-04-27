@@ -38,7 +38,8 @@ class Map:
         "8K": {"width": 7680, "height": 4320},      # 7680x4320 (16:9)
     }
 
-    def __init__(self, data_filter: DataFilter,
+    def __init__(self,
+                data_filter: DataFilter,
                 player_list: List[str] = None, 
                 tribe_list: List[str] = None, 
                 custom_color_map: dict = None, 
@@ -149,6 +150,8 @@ class Map:
 
         self.add_date_time = True
         self.add_watermark = True
+        
+        self.legend_width = self.image_width // 5  
 
         self.color_manager = ColorManager()
 
@@ -239,12 +242,19 @@ class Map:
 
         if self.show_grid:
             self.draw_grid(self.image, self.grid_color, self.grid_interval, self.show_center_lines)
-            
+    
+    def finalize_image(self):
+        """Apply final touches to the image
+        """
         if self.add_watermark:
             self.watermark("@tw-timelapse")
         
         if self.add_current_date_time:
             self.add_current_date_time()
+
+        self.add_title_to_image()
+
+        return self.image
     
     def draw_top_players(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
@@ -295,63 +305,84 @@ class Map:
             self.draw_centroid_text(self.tribe_village, len(self.tribe_list), "specifictribe")
         return self.image
 
-    def draw_war_legend(self, window_days: int = 3, top_pairs: int = 10, top_tribes: int = 10, image: Image = None):
-        """Render a styled war legend, matching the aesthetics of other legends."""
+    def build_war_legend_graph(
+        self,
+        legend_width: int,
+        window_days: int = 3,
+        top_pairs: int = 10,
+        top_tribes: int = 10,
+        min_exchange_villages: int = 50,
+    ) -> Image:
+        """Build a war overview panel sized to fit a legend column."""
         war_stats = self.data_filter.get_tribe_war_overview(window_days=window_days)
         pairwise = war_stats.get("pairwise", pd.DataFrame())
         totals = war_stats.get("totals", pd.DataFrame())
 
-        if image is None:
-            image = self.image
-        else:
-            self.image = image
-
-        legend_width = 1000
-        legend_image = Image.new("RGBA", (legend_width, image.height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(legend_image)
-
-        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
-            logging.info("No war statistics available to draw war legend.")
-            # Still combine the images, just show an empty legend
-            combined_width = image.width + legend_image.width
-            combined_image = Image.new("RGBA", (combined_width, image.height))
-            combined_image.paste(image, (0, 0))
-            combined_image.paste(legend_image, (image.width, 0))
-            self.image = combined_image
-            # Apply aspect ratio correction if enabled
-            if self.apply_aspect_ratio:
-                self.image = self.apply_aspect_ratio_correction(self.image, self.image_type)
-            return self.image
-
-        draw.rectangle([0, 0, legend_width, image.height], fill="#000000")
-
-        title_font_size = int(self.font_size * 1.6)
-        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
-        subtitle_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 1.1))
-
-        draw.text((legend_width // 2, 40), f"War Overview - last {window_days} days", fill=self.tw_color, font=title_font, anchor="mt")
-        draw.line([40, 100, legend_width - 40, 100], fill=self.tw_color, width=3)
-
-        section_padding = 40
-        y_offset = 120
-
-        rank_x = section_padding
-        winner_x = rank_x + 90
-        gain_x = winner_x + 280
-        target_x = gain_x + 175
-        time_x = legend_width - section_padding - 160
-        row_height = self.font_size + 18
+        def is_real_tribe(value) -> bool:
+            # Exclude barbarian/no-tribe placeholders like 0, -, ?, NaN.
+            if pd.isna(value):
+                return False
+            text = str(value).strip()
+            return text not in {"", "0", "-", "?", "none", "nan"}
 
         if pairwise is not None and not pairwise.empty:
-            draw.text((section_padding, y_offset), "Top Tribe Gains", fill=self.tw_color, font=subtitle_font, anchor="lt")
-            y_offset += self.font_size + 20
+            # Keep only real tribe-vs-tribe exchanges and substantial changes.
+            pairwise = pairwise[
+                pairwise["new_tribeid"].apply(is_real_tribe)
+                & pairwise["old_tribeid"].apply(is_real_tribe)
+                & pairwise["new_tribe_tag"].apply(is_real_tribe)
+                & pairwise["old_tribe_tag"].apply(is_real_tribe)
+                & (pairwise["villages_taken"].fillna(0).astype(int) > min_exchange_villages)
+            ]
+
+        if totals is not None and not totals.empty:
+            totals = totals[
+                totals["tribeid"].apply(is_real_tribe)
+                & totals["tribe_tag"].apply(is_real_tribe)
+                & ((totals["villages_gained"].fillna(0).astype(int) + totals["villages_lost"].fillna(0).astype(int)) > min_exchange_villages)
+            ]
+
+        panel_height = max(420, int(self.font_size * 8.5))
+        legend_image = Image.new("RGBA", (legend_width, panel_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(legend_image)
+        draw.rectangle([0, 0, legend_width, panel_height], fill="#000000")
+
+        if (pairwise is None or pairwise.empty) and (totals is None or totals.empty):
+            draw.text(
+                (legend_width // 2, panel_height // 2),
+                f"No war data ({window_days}d, >{min_exchange_villages} villages)",
+                fill=self.tw_color,
+                font=self.font,
+                anchor="mm",
+            )
+            return legend_image
+
+        title_font_size = int(self.font_size * 1.2)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
+        subtitle_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 0.9))
+        body_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 0.7))
+
+        draw.text((legend_width // 2, 18), f"War Overview ({window_days}d)", fill=self.tw_color, font=title_font, anchor="mt")
+        draw.line([30, 65, legend_width - 30, 65], fill=self.tw_color, width=2)
+
+        section_padding = 30
+        y_offset = 76
+
+        rank_x = section_padding
+        winner_x = rank_x + 48
+        gain_x = int(legend_width * 0.58)
+        target_x = int(legend_width * 0.74)
+        row_height = int(self.font_size * 0.75)
+
+        if pairwise is not None and not pairwise.empty:
+            y_offset += int(self.font_size * 0.7)
 
             header_y = y_offset
-            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((winner_x, header_y), "Winner", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((gain_x, header_y), "+Villages", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((target_x, header_y), "From", fill=self.tw_color, font=self.font, anchor="lt")
-            y_offset += self.font_size + 10
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((winner_x, header_y), "Winner", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((gain_x, header_y), "+V", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((target_x, header_y), "From", fill=self.tw_color, font=body_font, anchor="lt")
+            y_offset += int(self.font_size * 0.7)
 
             for rank, (_, row) in enumerate(pairwise.head(top_pairs).iterrows(), start=1):
                 attacker_tag = urllib.parse.unquote_plus(str(row.get("new_tribe_tag", "?")))
@@ -359,26 +390,27 @@ class Map:
                 gained = int(row.get("villages_taken", 0))
                 color = self.color_manager.get_color_without_force(row.get("new_tribeid"))
 
-                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
-                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
-                draw.text((winner_x, y_offset), f"[{attacker_tag}]", fill=color, font=self.font, anchor="lt")
-                draw.text((gain_x, y_offset), f"+{gained}", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.text((target_x, y_offset), f"[{defender_tag}]", fill=self.color_manager.get_color_without_force(row.get("old_tribeid")), font=self.font, anchor="lt")
+                draw.rectangle([rank_x, y_offset + 2, rank_x + 12, y_offset + 14], fill=color)
+                draw.text((rank_x + 16, y_offset), f"{rank}", fill=self.tw_color, font=body_font, anchor="lt")
+                draw.text((winner_x, y_offset), f"[{attacker_tag}]", fill=color, font=body_font, anchor="lt")
+                draw.text((gain_x, y_offset), f"+{gained}", fill=self.tw_color, font=body_font, anchor="lt")
+                draw.text((target_x, y_offset), f"[{defender_tag}]", fill=self.color_manager.get_color_without_force(row.get("old_tribeid")), font=body_font, anchor="lt")
                 y_offset += row_height
 
-            y_offset += 30
+            y_offset += int(self.font_size * 0.3)
 
         if totals is not None and not totals.empty:
-            draw.text((section_padding, y_offset), "Net Village Change", fill=self.tw_color, font=subtitle_font, anchor="lt")
-            y_offset += self.font_size + 20
+            draw.text((section_padding, y_offset), "Net Change", fill=self.tw_color, font=subtitle_font, anchor="lt")
+            y_offset += int(self.font_size * 0.7)
 
             header_y = y_offset
-            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((winner_x, header_y), "Tribe", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((gain_x, header_y), "Net", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((target_x, header_y), "Gained", fill=self.tw_color, font=self.font, anchor="lt")
-            draw.text((time_x, header_y), "Lost", fill=self.tw_color, font=self.font, anchor="lt")
-            y_offset += self.font_size + 10
+            time_x = legend_width - section_padding - 56
+            draw.text((rank_x, header_y), "#", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((winner_x, header_y), "Tribe", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((gain_x, header_y), "Net", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((target_x, header_y), "+", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((time_x, header_y), "-", fill=self.tw_color, font=body_font, anchor="lt")
+            y_offset += int(self.font_size * 0.7)
 
             for rank, (_, row) in enumerate(totals.head(top_tribes).iterrows(), start=1):
                 tribe_tag = urllib.parse.unquote_plus(str(row.get("tribe_tag", "?")))
@@ -387,22 +419,49 @@ class Map:
                 net = int(row.get("net_villages", 0))
                 color = self.color_manager.get_color_without_force(row.get("tribeid"))
 
-                draw.rectangle([rank_x, y_offset + 5, rank_x + 20, y_offset + self.font_size + 5], fill=color)
-                draw.text((rank_x + 30, y_offset + self.font_size / 2 + 5), f"{rank}", fill=self.tw_color, font=self.font, anchor="lm")
-                draw.text((winner_x, y_offset), f"[{tribe_tag}]", fill=color, font=self.font, anchor="lt")
-                draw.text((gain_x, y_offset), f"{net:+}", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.text((target_x, y_offset), f"{gained}", fill=self.tw_color, font=self.font, anchor="lt")
-                draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=self.font, anchor="lt")
+                draw.rectangle([rank_x, y_offset + 2, rank_x + 12, y_offset + 14], fill=color)
+                draw.text((rank_x + 16, y_offset), f"{rank}", fill=self.tw_color, font=body_font, anchor="lt")
+                draw.text((winner_x, y_offset), f"[{tribe_tag}]", fill=color, font=body_font, anchor="lt")
+                draw.text((gain_x, y_offset), f"{net:+}", fill=self.tw_color, font=body_font, anchor="lt")
+                draw.text((target_x, y_offset), f"{gained}", fill=self.tw_color, font=body_font, anchor="lt")
+                draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=body_font, anchor="lt")
                 y_offset += row_height
 
-        combined_width = image.width + legend_image.width
-        combined_image = Image.new("RGBA", (combined_width, image.height))
-        combined_image.paste(image, (0, 0))
-        combined_image.paste(legend_image, (image.width, 0))
+        used_height = min(legend_image.height, y_offset + int(self.font_size * 0.5))
+        return legend_image.crop((0, 0, legend_width, max(220, used_height)))
 
-        self.image = combined_image
+    def draw_war_legend(
+        self,
+        window_days: int = 3,
+        top_pairs: int = 10,
+        top_tribes: int = 10,
+        image: Image = None,
+        min_exchange_villages: int = 50,
+    ):
+        """Compatibility wrapper to include war panel in the right legend column."""
+        if image is None:
+            image = self.image
+        return self.draw_legend(
+            top_type="tribes",
+            image=image,
+            war_window_days=window_days,
+            war_top_pairs=top_pairs,
+            war_top_tribes=top_tribes,
+            war_min_exchange_villages=min_exchange_villages,
+        )
 
-        return self.image
+    def format_value_label(self, value: int) -> str:
+        """Format large values compactly for legends (e.g. 1.2m)."""
+        abs_value = abs(value)
+        if abs_value >= 1_000_000:
+            millions = abs_value / 1_000_000
+            if millions >= 100:
+                million_text = f"{millions:.0f}"
+            else:
+                million_text = f"{millions:.1f}".rstrip("0").rstrip(".")
+            sign = "-" if value < 0 else ""
+            return f"{sign}{million_text}m"
+        return f"{value:,}"
 
     def draw_graph(self, top_type: str = "players", graph_type: str = "points", specific: bool = False, legend_width: int = 1000):
         """Draw a graph of a specific statistic for the top players or tribes.
@@ -447,7 +506,7 @@ class Map:
         title = ""
 
         if graph_type == "points":
-            title = f"Top {top_type.capitalize()} Points - {self.data_filter.world_id}"
+            title = f"Top {top_type.capitalize()} Points"
             for idx, pid in enumerate(base_ids):
                 if top_type == "tribes":
                     raw_name = f"{urllib.parse.unquote_plus(base_names[idx])} [{urllib.parse.unquote_plus(base_tags[idx])}]"
@@ -461,7 +520,7 @@ class Map:
                 })
 
         elif graph_type == "killall":
-            title = f"Opponents Defeated - {self.data_filter.world_id}"
+            title = f"Most Opponents Defeated"
             if top_type == "players":
                 kill_df = self.data_filter.get_top_10_killall_players()
                 for row in kill_df.itertuples(index=False):
@@ -483,7 +542,7 @@ class Map:
             graph_items.sort(key=lambda x: x["value"], reverse=True)
 
         elif graph_type == "villages":
-            title = f"Villages - Top {top_type.capitalize()}"
+            title = f"Most Villages"
             if top_type == "players":
                 village_counts = self.data_filter.get_t10_player_villages()["playerid"].value_counts()
                 for idx, pid in enumerate(base_ids):
@@ -507,7 +566,7 @@ class Map:
             graph_items.sort(key=lambda x: x["value"], reverse=True)
 
         elif graph_type == "conquers":
-            title = f"Conquers (72h) - Top {top_type.capitalize()}"
+            title = f"Most Conquers (72h)"
             if top_type == "players":
                 conquers_df = self.data_filter.get_past_day_t10_conquers_players()
                 counts = conquers_df["playerid"].value_counts() if not conquers_df.empty else {}
@@ -540,7 +599,7 @@ class Map:
         graph = Image.new("RGBA", (legend_width, graph_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(graph)
 
-        title_font_size = int(self.font_size * 1.6)
+        title_font_size = int(self.font_size * 1.4)
         title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
         title_y = 10
         draw.text((legend_width // 2, title_y), title, fill=self.tw_color, font=title_font, anchor="mt")
@@ -551,11 +610,22 @@ class Map:
         max_value = max((item["value"] for item in graph_items), default=1)
 
         # column layout: rank | name | value | bar
-        rank_x = 40
-        name_x = 100
-        points_x = 520
-        bar_left = 820
-        bar_right = legend_width - 40
+        # Keep this responsive so smaller legend widths (e.g. 800px) still render correctly.
+        horizontal_padding = 35
+        rank_x = horizontal_padding
+        name_x = rank_x + 50
+
+        bar_right = legend_width - horizontal_padding
+        min_bar_width = 160
+        value_col_width = 130
+
+        points_x = max(name_x + 100, bar_right - (min_bar_width + value_col_width))
+        bar_left = points_x + value_col_width
+
+        # Ensure valid rectangle coordinates even if legend_width is very small.
+        if bar_left >= bar_right:
+            bar_left = max(name_x + 70, bar_right - 3)
+
         bar_max_width = max(1, bar_right - bar_left)
         bar_height = int(self.font_size * 0.8)
 
@@ -566,17 +636,19 @@ class Map:
             bar_top = row_y + int(self.font_size * 0.2)
             bar_bottom = bar_top + bar_height
 
+            # legend color box
             color = item.get("color", self.tw_color)
             draw.rectangle([10, row_y, 30, row_y + 40], fill=color)
+            # rank number (1., 2., etc.)
             draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
 
             raw_name = item["name"]
-            max_name_len = 18
+            max_name_len = 15
             name_text = raw_name if len(raw_name) <= max_name_len else raw_name[:max_name_len - 3] + "..."
-            draw.text((name_x, row_y), name_text, fill=color, font=self.font, anchor="lt")
+            draw.text((name_x, row_y + 5), name_text, fill=color, font=self.font, anchor="lt")
 
-            value_label = f"{item['value']:,}"
-            draw.text((points_x, row_y), value_label, fill=self.tw_color, font=self.font, anchor="lt")
+            value_label = self.format_value_label(item["value"])
+            draw.text((points_x, row_y + 5), value_label, fill=self.tw_color, font=self.font, anchor="lt")
 
             draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], fill="#1f1f1f")
             bar_width = int(bar_max_width * (item["value"] / max_value)) if max_value else 0
@@ -592,17 +664,13 @@ class Map:
 
         return graph
     
-    def add_title_to_image(self, image: Image) -> Image:
+    def add_title_to_image(self) -> Image:
         """
         Add a title at the top of the image, drawn directly on the map.
-        
-        Args:
-            image (Image): The image to add the title to
-            
+                    
         Returns:
             Image: Image with title added
         """
-        self.image = image
         draw = ImageDraw.Draw(self.image)
         
         # Determine the label for the image type
@@ -617,7 +685,16 @@ class Map:
         
         return self.image
 
-    def draw_legend(self, top_type: str = "players", image: Image = None, specific: bool = False ):
+    def draw_legend(
+        self,
+        top_type: str = "players",
+        image: Image = None,
+        specific: bool = False,
+        war_window_days: int = 3,
+        war_top_pairs: int = 10,
+        war_top_tribes: int = 10,
+        war_min_exchange_villages: int = 50,
+    ):
         """Draw a stacked legend with all bar charts for the top players or tribes on the left side of the map."""
         
         if image is None:
@@ -625,55 +702,58 @@ class Map:
         else:
             self.image = image
 
-        if self.add_watermark:  
-            image = self.watermark("youtube.com/@tw-timelapse")
-        
-        if self.add_current_date_time:
-            image = self.add_current_date_time()
-
-        # Use a fixed width for the legend
-        legend_width = 1600
+        legend_width = self.legend_width
 
         # Build all graphs we want to show in order
-        graphs = []
+        right_graphs = []
 
-        graphs.extend([
-            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points"),
-            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="killall"),
+        right_graphs.extend([
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="villages"),
             self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="conquers"),
         ])
 
-        graphs.append(self.draw_dominance_bar(legend_width=legend_width))
+        if top_type == "tribes":
+            right_graphs.append(
+                self.build_war_legend_graph(
+                    legend_width=legend_width,
+                    window_days=war_window_days,
+                    top_pairs=war_top_pairs,
+                    top_tribes=war_top_tribes,
+                    min_exchange_villages=war_min_exchange_villages,
+                )
+            )
 
-        total_graph_height = sum(g.height for g in graphs)
-        legend_height = max(image.height, total_graph_height)
-
-        legend_image = Image.new("RGBA", (legend_width, legend_height), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(legend_image)
-        draw.rectangle([0, 0, legend_width, legend_height], fill="#000000")
-
-        # Space graphs evenly across the available height (including top and bottom margins)
-        num_graphs = len(graphs)
-        if num_graphs > 0:
-            available_height = legend_height - total_graph_height
-            spacing = available_height // (num_graphs + 1)
-        else:
-            spacing = 0
+        left_graphs = []
+        left_graphs.extend([
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="points"),
+            self.draw_graph(top_type=top_type, specific=specific, legend_width=legend_width, graph_type="killall"),
+        ])
         
-        current_y = spacing
-        for g in graphs:
-            legend_image.paste(g, (0, current_y, g.width, current_y + g.height), g)
-            current_y += g.height + spacing
+        left_graphs.append(self.draw_dominance_bar(legend_width=legend_width))
 
-        combined_width = image.width + legend_image.width
-        combined_height = max(image.height, legend_height)
-        combined_image = Image.new("RGBA", (combined_width, combined_height))
-        # Legend on left, map on right
-        combined_image.paste(legend_image, (0, 0))
-        combined_image.paste(image, (legend_image.width, 0))
+        legend_height = image.height
 
-        self.image = combined_image
+        draw = ImageDraw.Draw(self.image)
+        draw.rectangle([0, 0, legend_width, legend_height], fill="#000000")
+        draw.rectangle([self.image.width - legend_width, 0, self.image.width, legend_height], fill="#000000")
+
+        def paste_graph_column(graphs: list, x_offset: int) -> None:
+            total_height = sum(g.height for g in graphs)
+            num_graphs = len(graphs)
+            if num_graphs > 0:
+                available_height = legend_height - total_height
+                spacing = max(0, available_height // (num_graphs + 1))
+            else:
+                spacing = 0
+
+            current_y = spacing
+            for g in graphs:
+                self.image.paste(g, (x_offset, current_y, x_offset + g.width, current_y + g.height), g)
+                current_y += g.height + spacing
+
+        # Paste both columns independently so left and right legends can differ in graph count/height.
+        paste_graph_column(left_graphs, 0)
+        paste_graph_column(right_graphs, self.image.width - legend_width)
 
         return self.image
 
@@ -730,7 +810,7 @@ class Map:
         title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", int(self.font_size * 1.4))
         draw.text((legend_width // 2, 24), "World Dominance", fill=self.tw_color, font=title_font, anchor="mt")
 
-        tribe_label = f"Leading tribe: [{summary['tribe_tag']}] {summary['tribe_name']}".strip()
+        tribe_label = f"Leading tribe: {summary['tribe_tag']}".strip()
         draw.text((40, 90), tribe_label, fill=color, font=self.font, anchor="lt")
 
         progress_text = f"{summary['villages']:,}/{summary['total']:,} villages"
@@ -786,15 +866,6 @@ class Map:
 
         return self.image
     
-    def crop_image(self, image: Image):
-        
-        spacing = self.max_border
-        
-        self.image =  image.crop(((self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin - spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing), (self.world_origin + spacing) * (self.cell_size + self.spacing)))
-
-        self.image = self.add_title_to_image(self.image)
-        return self.image
-
     def draw_grid(self, image: Image, color: str, grid_spacing: int, show_center_lines: bool = True):
         """Draw a grid around the center of the image, with grid spacing
 
@@ -825,17 +896,14 @@ class Map:
         draw = ImageDraw.Draw(self.image)
         date_time_font_size = int(self.font_size * 2.0)
         date_time_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", date_time_font_size)
-        if self.printed_world:
-            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC - " + self.printed_world, fill=self.tw_color, font=date_time_font, anchor="lb")
-        else:
-            draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=date_time_font, anchor="lb")
+        draw.text((self.legend_width, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=date_time_font, anchor="lb")
         return self.image
 
     def watermark(self, text: str = "@tw-timelapse"):
         draw = ImageDraw.Draw(self.image)
         watermark_font_size = int(self.font_size * 2)
         watermark_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", watermark_font_size)
-        draw.text((self.image.width - 10, self.image.height - 10), text, fill=self.tw_color, font=watermark_font, anchor="rb")
+        draw.text((self.image.width - 10 - self.legend_width, self.image.height - 10), text, fill=self.tw_color, font=watermark_font, anchor="rb")
         return self.image
         
     def local_save(self, filename: str):
@@ -844,158 +912,85 @@ class Map:
 
     def draw_centroid_text(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
         """
-        Draw zones of control for the top N players or tribes and mark the centroid with text.
-
-        Args:
-            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
-            top_n (int): Number of top players or tribes to draw zones for.
-            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
+        Draw centroid labels for top entities with scalable font and translucent stroke.
         """
         if filter_type == "playerid":
             top_entities = self.t10_players.head(top_n)
         elif filter_type == "tribeid":
             top_entities = self.t10_tribes.head(top_n)
         elif filter_type == "specifictribe":
-            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
+            top_entities = self.tribe_df[self.tribe_df["tag"].isin(self.tribe_list)].head(top_n)
             filter_type = "tribeid"
         elif filter_type == "specificplayer":
-            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
+            top_entities = self.player_df[self.player_df["name"].isin(self.player_list)].head(top_n)
             filter_type = "playerid"
         else:
             raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
 
-        # If total villages are less than 20, skip drawing
         if len(village_df) < 20:
             return self.image
-            
-        draw = ImageDraw.Draw(self.image, 'RGBA')
 
-        # Calculate village counts for all entities to determine font scaling
-        village_counts = {}
-        for _, entity in top_entities.iterrows():
-            entity_id = entity[filter_type]
-            entity_villages = village_df[village_df[filter_type] == entity_id]
-            village_counts[entity_id] = len(entity_villages)
-        
-        # Get max and min village counts for scaling
-        if village_counts:
-            max_villages = max(village_counts.values())
-            min_villages = min(village_counts.values())
+        draw = ImageDraw.Draw(self.image, "RGBA")
+
+        # Precompute village counts only once
+        counts = village_df[filter_type].value_counts().to_dict()
+        selected_ids = [entity[filter_type] for _, entity in top_entities.iterrows()]
+        selected_counts = [counts.get(entity_id, 0) for entity_id in selected_ids if counts.get(entity_id, 0) > 0]
+
+        if selected_counts:
+            min_villages = min(selected_counts)
+            max_villages = max(selected_counts)
         else:
-            max_villages = min_villages = 1
+            min_villages = max_villages = 1
 
         for _, entity in top_entities.iterrows():
             entity_id = entity[filter_type]
             entity_villages = village_df[village_df[filter_type] == entity_id]
-            
-            color = self.color_manager.get_color(entity_id)
-            color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-            fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 255)
             if entity_villages.empty:
                 continue
 
-            village_coords = entity_villages[['x_coord', 'y_coord']].values
-            if len(village_coords) > 2:
-                # Calculate centroid
-                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
-                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
-            else:
-                continue
-            
-            # Calculate scaled font size based on village count
-            village_count = village_counts[entity_id]
+            # Mean directly in world coordinates, then convert once
+            centroid_world_x = float(entity_villages["x_coord"].mean())
+            centroid_world_y = float(entity_villages["y_coord"].mean())
+            x, y = self.convert_world_to_image_coords(centroid_world_x, centroid_world_y)
+
+            village_count = counts.get(entity_id, 0)
             if max_villages > min_villages:
-                # Scale font size from 100% to 200% of base font size (smaller tribes stay normal, bigger get larger)
                 scale_factor = 1.0 + (village_count - min_villages) / (max_villages - min_villages)
             else:
                 scale_factor = 1.0
-            
+
             scaled_font_size = int(self.font_size * scale_factor)
             scaled_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", scaled_font_size)
-            
-            # Draw the name at the centroid
-            name = urllib.parse.unquote_plus(entity['name'])
 
-            x, y = self.convert_world_to_image_coords(centroid_x / (self.cell_size + self.spacing), centroid_y / (self.cell_size + self.spacing))
+            color = self.color_manager.get_color(entity_id)
+            r, g, b = (int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4))
 
-            # Scale outline offset based on font size
-            outline_offset = max(2, int(4 * scale_factor))
-            for dx in [-outline_offset, 0, outline_offset]:
-                for dy in [-outline_offset, 0, outline_offset]:
-                    if dx != 0 or dy != 0:
-                        draw.text((x + dx, y + dy), name, fill=(0, 0, 0, 100), font=scaled_font, anchor="mm")
-            
-            draw.text((x, y), name, fill=fill_color, font=scaled_font, anchor="mm")
+            name = urllib.parse.unquote_plus(entity["name"])
+            stroke_w = max(2, int(3 * scale_factor))
+            # Draw text on a transparent layer, then alpha-composite for true translucency.
+            text_layer = Image.new("RGBA", self.image.size, (0, 0, 0, 0))
+            text_draw = ImageDraw.Draw(text_layer, "RGBA")
 
-            # save the centroid coordinates
-            self.entity_centroids[entity_id] = (x, y)
+            text_draw.text(
+                (x, y),
+                name,
+                fill=(r, g, b, 255),
+                font=scaled_font,
+                anchor="mm",
+                stroke_width=stroke_w,
+                stroke_fill=(0, 0, 0, 255),
+            )
+
+            # Global opacity for the entire label (fill + stroke).
+            label_opacity = 0.65
+            alpha = text_layer.getchannel("A").point(lambda p: int(p * label_opacity))
+            text_layer.putalpha(alpha)
+
+            self.image = Image.alpha_composite(self.image.convert("RGBA"), text_layer)
 
         return self.image
 
-    def apply_aspect_ratio_correction(self, image: Image, image_type: str = "tribe") -> Image:
-        """
-        Apply aspect ratio correction to image (16:9 aspect ratio).
-        
-        Args:
-            image (Image): The image to correct
-            image_type (str): Either "player" (uses 2K) or "tribe" (uses 4K)
-            
-        Returns:
-            Image: Corrected image with proper dimensions (16:9 aspect ratio)
-        """
-        # Determine target resolution based on image type
-        if image_type == "player":
-            target_res = "2K"
-        elif image_type == "tribe":
-            target_res = "4K"
-        else:
-            target_res = self.output_resolution
-        
-        target_width = self.OUTPUT_RESOLUTIONS[target_res]["width"]
-        target_height = self.OUTPUT_RESOLUTIONS[target_res]["height"]
-        
-        # Resize to fit the target resolution maintaining aspect ratio where possible
-        # If image is wider than target, scale by width. Otherwise scale by height.
-        aspect_ratio = image.width / image.height
-        target_aspect = target_width / target_height
-        
-        if aspect_ratio > target_aspect:
-            # Image is wider, scale by width
-            new_width = target_width
-            new_height = int(target_width / aspect_ratio)
-        else:
-            # Image is narrower or equal, scale by height
-            new_height = target_height
-            new_width = int(target_height * aspect_ratio)
-        
-        # Resize image with high-quality resampling
-        scaled_image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
-        
-        # Create a new image with exact target dimensions and black padding
-        final_image = Image.new("RGBA", (target_width, target_height), (0, 0, 0, 255))
-        
-        # Center the scaled image on the canvas
-        x_offset = (target_width - new_width) // 2
-        y_offset = (target_height - new_height) // 2
-        
-        final_image.paste(scaled_image, (x_offset, y_offset), scaled_image)
-        
-        logging.info(f"Applied aspect ratio correction to {target_res} ({target_width}x{target_height}) for {image_type}")
-        
-        return final_image
-
-    def finalize_youtube_image(self, image: Image, image_type: str = "tribe") -> Image:
-        """
-        Finalize image for YouTube by ensuring proper resolution and aspect ratio.
-        
-        Args:
-            image (Image): The image to finalize
-            image_type (str): Either "player" or "tribe"
-            
-        Returns:
-            Image: YouTube-ready image
-        """
-        return self.scale_image_to_youtube_resolution(image, image_type)
 
 if __name__ == "__main__":
     from twmap.snapshot.datafilter import DataFilter
@@ -1029,19 +1024,17 @@ if __name__ == "__main__":
     data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
 
     # Player timelapse - 2K resolution with aspect ratio correction
-    map = Map(data_filter, max_coords=950, output_resolution="4K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
-    top_players_image = map.draw_top_players(center_text=True)
-    # top_players_image = map.crop_image(top_players_image)
+    # map = Map(data_filter, max_coords=950, output_resolution="4K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
+    # top_players_image = map.draw_top_players(center_text=True)
     # top_players_image_with_legend = map.draw_legend(top_type="players")
     # top_players_image_with_legend.show()
-    top_players_image.show()
-    map.local_save("outputs/en146/top_players.png")
+    # map.local_save("outputs/en146/top_players.png")
 
     # Tribe timelapse - 4K resolution with aspect ratio correction
-    # map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
-    # top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
-    # top_tribes_image = map.crop_image(top_tribes_image)
-    # top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
-    # top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
-    # top_tribes_image_with_war.show()
+    map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
+    top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
+    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
+    top_tribes_image_with_war = map.draw_war_legend(window_days=30, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
+    final = map.finalize_image()
+    final.show()
     # map.local_save("outputs/en146/top_tribes_with_war.png")
