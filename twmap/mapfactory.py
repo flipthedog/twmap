@@ -47,6 +47,8 @@ class MapFactory:
             
         self.custom_color_map = ColorManager().default_colors
         self.max_coords = max_coords
+
+        self.initial_image = None  # Store the initial blank image for resetting between map generations
     
     def create_top_10_map(self, data_filter: DataFilter):
         # Convert the timestamp string from YYYYMMDD_HHMMSS format to datetime
@@ -55,19 +57,21 @@ class MapFactory:
         
         logging.info(f"Creating top player map for world {data_filter.world_id} at time {data_filter.printed_timestamp}")
         
-        # Create player map with image_type="player"
-        map_player = Map(data_filter, custom_color_map=self.custom_color_map, max_coords=self.max_coords, server=self.world_loader.server, world=self.world_loader.world, image_type="player", output_resolution="2K", apply_aspect_ratio=True)
-        image_top_players = map_player.draw_top_players(center_text=True)  # Create the map with top players
-        image_top_players = map_player.crop_image(image_top_players)
-        image_top_players_with_legend = map_player.draw_legend(top_type="players")  # Create the map with top players and legend
+        map = Map(
+                  data_filter,
+                  initial_map=self.initial_image,  # Pass the initial
+                  max_coords=self.max_coords,
+                  output_resolution="4K",
+                  apply_aspect_ratio=True,
+                  server=self.world_loader.server,
+                  world=self.world_loader.world
+                )
         
-        # Create tribe map with image_type="tribe"
-        map_tribe = Map(data_filter, custom_color_map=self.custom_color_map, max_coords=self.max_coords, server=self.world_loader.server, world=self.world_loader.world, image_type="tribe", output_resolution="4K", apply_aspect_ratio=True)
-        image_top_tribes = map_tribe.draw_top_tribes(center_text=True, zones_of_control=False)  # Create the map with top tribes
-        image_top_tribes = map_tribe.crop_image(image_top_tribes)
-        image_top_tribes_with_legend = map_tribe.draw_legend(top_type="tribes")  # Create the map with top tribes and legend
-        image_top_tribes_with_war = map_tribe.draw_war_legend(window_days=30, top_pairs=10, top_tribes=10, image=image_top_tribes_with_legend.copy())  # Create the map with top tribes and war legend
-
+        if self.initial_image is None:
+            self.initial_image = copy(map.initial_image)  # Store the initial blank image for resetting
+        
+        top_tribe, top_player = map.draw_tribal_map()
+        
         # Convert PIL Images to bytes for S3 upload
         def pil_to_bytes(pil_image):
             """Convert PIL Image to bytes"""
@@ -80,8 +84,8 @@ class MapFactory:
         timestamp_str = pd.to_datetime(data_filter.printed_timestamp).strftime("%Y%m%d_%H%M%S")
 
         # Convert images to bytes before uploading
-        players_image_bytes = pil_to_bytes(image_top_players_with_legend)
-        tribes_image_bytes = pil_to_bytes(image_top_tribes_with_war)
+        players_image_bytes = pil_to_bytes(top_player)
+        tribes_image_bytes = pil_to_bytes(top_tribe)
 
         self.s3_client.put_object(
             Bucket=self.s3_map_bucket, 

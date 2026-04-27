@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 from twmap.snapshot.datafilter import DataFilter
 from twmap.map.colors import ColorManager
 
-from typing import List
+from typing import List, Tuple
 
 from datetime import timezone, datetime
 
@@ -40,28 +40,30 @@ class Map:
 
     def __init__(self,
                 data_filter: DataFilter,
+                initial_map: Image = None,
                 player_list: List[str] = None, 
                 tribe_list: List[str] = None, 
                 custom_color_map: dict = None, 
                 max_coords: int = 750, 
                 output_resolution: str = "4K", 
                 apply_aspect_ratio: bool = True, 
-                image_type: str = "tribe", 
                 server: str = None, 
                 world: str = None
                 ):
-        """Load it with TW data and create a map
+        """Load with data to create a map
 
         Args:
-            village_df (DataFrame): DataFrame containing village data
-            player_df (DataFrame): DataFrame containing player data
-            tribe_df (DataFrame): DataFrame containing tribe data
-            conquer_df (DataFrame): DataFrame containing conquer data
-            output_resolution (str): Target output resolution ("2K", "4K", or "8K")
-            apply_aspect_ratio (bool): Whether to apply aspect ratio correction to final images
-            image_type (str): "player" for player timelapse or "tribe" for tribe timelapse
-            server (str): Game server code (e.g., "en", "de", "br") - extracted from data_filter if not provided
-            world (str): World/game ID (e.g., "146", "147") - extracted from data_filter if not provided
+            data_filter (DataFilter): _description_
+            initial_map (Image, optional): _description_. Defaults to None.
+            player_list (List[str], optional): _description_. Defaults to None.
+            tribe_list (List[str], optional): _description_. Defaults to None.
+            custom_color_map (dict, optional): _description_. Defaults to None.
+            max_coords (int, optional): _description_. Defaults to 750.
+            output_resolution (str, optional): _description_. Defaults to "4K".
+            apply_aspect_ratio (bool, optional): _description_. Defaults to True.
+            image_type (str, optional): _description_. Defaults to "tribe".
+            server (str, optional): _description_. Defaults to None.
+            world (str, optional): _description_. Defaults to None.
         """
 
         # Enable logging
@@ -135,7 +137,6 @@ class Map:
 
         self.apply_aspect_ratio = apply_aspect_ratio
         self.aspect_ratio = self.target_width / self.target_height
-        self.image_type = image_type  # player or tribe, used for labeling and color choices
 
         self.image_height = self.target_height
         self.image_width = int(self.image_height * self.aspect_ratio)
@@ -151,7 +152,7 @@ class Map:
         self.add_date_time = True
         self.add_watermark = True
         
-        self.legend_width = self.image_width // 5  
+        self.legend_width = int(self.image_width * 0.225)
 
         self.color_manager = ColorManager()
 
@@ -176,11 +177,42 @@ class Map:
         self.font_size = 48
         self.font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", self.font_size)  # Load the font here
 
-        self.initial_map()
-
-        self.initial_image = deepcopy(self.image)
+        if initial_map:
+            self.image = initial_map
+            self.initial_image = initial_map  # Store the initial image for resetting between map generations    
+        else:
+            self.initial_image = self.initial_map()
 
         self.entity_centroids = {}
+    
+    def draw_tribal_map(self) -> Tuple[Image.Image, Image.Image]:
+        """
+        Draw the tribal map with villages colored by tribe and a legend of top tribes.
+        """
+        
+        # draw player villages
+        self.draw(self.village_df, None)
+
+        # draw barbarian villages
+        self.draw(self.village_df, "barbarian")
+        
+        # these drawings are used as a base for the player/tribe specific maps, so we save them before drawing the specific villages on top
+        self.copy_map = deepcopy(self.image)
+        
+        # TOP TRIBE DRAWINGS
+        top_tribes_image = self.draw_top_tribes(zones_of_control=False, center_text=True)
+        top_tribes_image_with_legend = self.draw_legend(top_type="tribes")
+        final_tribe_image = self.finalize_image(image_type="tribes")
+
+        # Resetting
+        self.image = self.copy_map
+        self.color_manager.reset_color_index()
+        
+        top_player_image = self.draw_top_players(center_text=True)
+        top_player_image_with_legend = self.draw_legend(top_type="players")
+        final_player_image = self.finalize_image(image_type="players")
+
+        return final_tribe_image, final_player_image
 
     def convert_world_to_image_coords(self, x, y):
         """
@@ -220,30 +252,17 @@ class Map:
                 
                 x, y = self.convert_world_to_image_coords(i, j)
 
-                upper_left = (x + self.spacing - self.cell_size // 2, y + self.spacing - self.cell_size // 2)
+                upper_left = (x - self.cell_size // 2, y - self.cell_size // 2)
                 lower_right = (x + self.cell_size // 2 - self.spacing, y + self.cell_size // 2 - self.spacing)
 
                 draw.rectangle([upper_left, lower_right], fill=cell_color)
         
-        # for i in range(0, self.world_height):
-
-        #     for j in range(0, self.world_width):
-
-        #         x = i * (self.cell_size + self.spacing)
-        #         y = j * (self.cell_size + self.spacing)
-
-        #         draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=cell_color)
-
-        # draw player villages
-        self.draw(self.village_df, None)
-
-        # draw barbarian villages
-        self.draw(self.village_df, "barbarian")
-
         if self.show_grid:
             self.draw_grid(self.image, self.grid_color, self.grid_interval, self.show_center_lines)
+
+        return self.image
     
-    def finalize_image(self):
+    def finalize_image(self, image_type: str = None):
         """Apply final touches to the image
         """
         if self.add_watermark:
@@ -252,13 +271,17 @@ class Map:
         if self.add_current_date_time:
             self.add_current_date_time()
 
-        self.add_title_to_image()
+        if image_type == "players":
+            self.add_title_to_image(image_type="players")
+        
+        if image_type == "tribes":
+            self.add_title_to_image(image_type="tribes")
 
         return self.image
     
     def draw_top_players(self, zones_of_control: bool = False, center_text: bool = False):
-        logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
-        logging.info(f"Found {len(self.t10_players)} top players")
+        # logging.info(f"Drawing {len(self.t10_players_v)} villages of top 10 players")
+        # logging.info(f"Found {len(self.t10_players)} top players")
         self.image = deepcopy(self.initial_image)
         self.draw(self.t10_players_v, "playerid")
         self.draw(self.past_day_conquers_p10, "playerid", 3)
@@ -271,9 +294,8 @@ class Map:
         return self.image
     
     def draw_top_tribes(self, zones_of_control: bool = False, center_text: bool = False):
-        logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
-        logging.info(f"Found {len(self.t10_tribes)} top tribes")
-        self.image = deepcopy(self.initial_image)
+        # logging.info(f"Drawing {len(self.t10_tribes_v)} villages of top 10 tribes")
+        # logging.info(f"Found {len(self.t10_tribes)} top tribes")
         self.draw(self.t10_tribes_v, "tribeid")
         self.draw(self.past_day_conquers_t10, "tribeid", 3)
         if zones_of_control:
@@ -285,7 +307,6 @@ class Map:
 
     def draw_specific_players(self, zones_of_control: bool = False, center_text: bool = False):
         logging.info(f"Drawing {len(self.player_village)} villages of specific players")
-        self.image = deepcopy(self.initial_image)
         self.draw(self.player_village, "playerid")
         self.draw(self.player_conquer, "playerid", 3)
         if zones_of_control:
@@ -342,7 +363,7 @@ class Map:
                 & ((totals["villages_gained"].fillna(0).astype(int) + totals["villages_lost"].fillna(0).astype(int)) > min_exchange_villages)
             ]
 
-        panel_height = max(420, int(self.font_size * 8.5))
+        panel_height = max(500, int(self.font_size * 10))
         legend_image = Image.new("RGBA", (legend_width, panel_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(legend_image)
         draw.rectangle([0, 0, legend_width, panel_height], fill="#000000")
@@ -380,7 +401,7 @@ class Map:
             header_y = y_offset
             draw.text((rank_x, header_y), "#", fill=self.tw_color, font=body_font, anchor="lt")
             draw.text((winner_x, header_y), "Winner", fill=self.tw_color, font=body_font, anchor="lt")
-            draw.text((gain_x, header_y), "+V", fill=self.tw_color, font=body_font, anchor="lt")
+            draw.text((gain_x, header_y), "Gain", fill=self.tw_color, font=body_font, anchor="lt")
             draw.text((target_x, header_y), "From", fill=self.tw_color, font=body_font, anchor="lt")
             y_offset += int(self.font_size * 0.7)
 
@@ -427,28 +448,7 @@ class Map:
                 draw.text((time_x, y_offset), f"{lost}", fill=self.tw_color, font=body_font, anchor="lt")
                 y_offset += row_height
 
-        used_height = min(legend_image.height, y_offset + int(self.font_size * 0.5))
-        return legend_image.crop((0, 0, legend_width, max(220, used_height)))
-
-    def draw_war_legend(
-        self,
-        window_days: int = 3,
-        top_pairs: int = 10,
-        top_tribes: int = 10,
-        image: Image = None,
-        min_exchange_villages: int = 50,
-    ):
-        """Compatibility wrapper to include war panel in the right legend column."""
-        if image is None:
-            image = self.image
-        return self.draw_legend(
-            top_type="tribes",
-            image=image,
-            war_window_days=window_days,
-            war_top_pairs=top_pairs,
-            war_top_tribes=top_tribes,
-            war_min_exchange_villages=min_exchange_villages,
-        )
+        return legend_image
 
     def format_value_label(self, value: int) -> str:
         """Format large values compactly for legends (e.g. 1.2m)."""
@@ -594,13 +594,16 @@ class Map:
         else:
             raise ValueError("Invalid graph_type. Expected 'points', 'killall', 'villages', or 'conquers'.")
 
+        graph_font_size = max(24, int(self.font_size * 0.78))
+        graph_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", graph_font_size)
+        title_font_size = int(graph_font_size * 1.35)
+        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
         item_count = len(graph_items)
-        graph_height = max(800, (item_count + 10) * self.font_size + 200)
+        row_height = int(graph_font_size * 1.28)
+        graph_height = max(720, (item_count * row_height) + title_font_size + 120)
         graph = Image.new("RGBA", (legend_width, graph_height), (0, 0, 0, 0))
         draw = ImageDraw.Draw(graph)
 
-        title_font_size = int(self.font_size * 1.4)
-        title_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", title_font_size)
         title_y = 10
         draw.text((legend_width // 2, title_y), title, fill=self.tw_color, font=title_font, anchor="mt")
 
@@ -611,15 +614,18 @@ class Map:
 
         # column layout: rank | name | value | bar
         # Keep this responsive so smaller legend widths (e.g. 800px) still render correctly.
-        horizontal_padding = 35
-        rank_x = horizontal_padding
-        name_x = rank_x + 50
+        horizontal_padding = 28
+        color_box_x = 10
+        color_box_size = max(16, int(graph_font_size * 0.65))
+        rank_x = color_box_x + color_box_size + 12
+        name_x = rank_x + int(graph_font_size * 1.15)
 
         bar_right = legend_width - horizontal_padding
-        min_bar_width = 160
-        value_col_width = 130
+        min_bar_width = max(200, int(legend_width * 0.34))
+        max_value_label = max((len(self.format_value_label(item["value"])) for item in graph_items), default=1)
+        value_col_width = max(int(graph_font_size * 2.2), int(max_value_label * graph_font_size * 0.55))
 
-        points_x = max(name_x + 100, bar_right - (min_bar_width + value_col_width))
+        points_x = max(name_x + int(graph_font_size * 3.2), bar_right - (min_bar_width + value_col_width))
         bar_left = points_x + value_col_width
 
         # Ensure valid rectangle coordinates even if legend_width is very small.
@@ -627,28 +633,29 @@ class Map:
             bar_left = max(name_x + 70, bar_right - 3)
 
         bar_max_width = max(1, bar_right - bar_left)
-        bar_height = int(self.font_size * 0.8)
+        bar_height = max(16, int(graph_font_size * 0.8))
 
-        base_y = line_y + 8
+        base_y = line_y + 14
 
         for i, item in enumerate(graph_items):
-            row_y = base_y + i * self.font_size
-            bar_top = row_y + int(self.font_size * 0.2)
+            row_y = base_y + i * row_height
+            bar_top = row_y + max(4, int(graph_font_size * 0.25))
             bar_bottom = bar_top + bar_height
 
             # legend color box
             color = item.get("color", self.tw_color)
-            draw.rectangle([10, row_y, 30, row_y + 40], fill=color)
+            color_box_y = row_y + max(2, (row_height - color_box_size) // 2)
+            draw.rectangle([color_box_x, color_box_y, color_box_x + color_box_size, color_box_y + color_box_size], fill=color)
             # rank number (1., 2., etc.)
-            draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=graph_font, anchor="lt")
 
             raw_name = item["name"]
             max_name_len = 15
             name_text = raw_name if len(raw_name) <= max_name_len else raw_name[:max_name_len - 3] + "..."
-            draw.text((name_x, row_y + 5), name_text, fill=color, font=self.font, anchor="lt")
+            draw.text((name_x, row_y), name_text, fill=color, font=graph_font, anchor="lt")
 
             value_label = self.format_value_label(item["value"])
-            draw.text((points_x, row_y + 5), value_label, fill=self.tw_color, font=self.font, anchor="lt")
+            draw.text((points_x, row_y), value_label, fill=self.tw_color, font=graph_font, anchor="lt")
 
             draw.rectangle([bar_left, bar_top, bar_right, bar_bottom], fill="#1f1f1f")
             bar_width = int(bar_max_width * (item["value"] / max_value)) if max_value else 0
@@ -658,13 +665,13 @@ class Map:
         if item_count > 0:
             used_height = bar_bottom + 30
         else:
-            used_height = line_y + self.font_size + 40
+            used_height = line_y + graph_font_size + 40
         used_height = min(used_height, graph.height)
         graph = graph.crop((0, 0, legend_width, used_height))
 
         return graph
     
-    def add_title_to_image(self) -> Image:
+    def add_title_to_image(self, image_type: str) -> Image:
         """
         Add a title at the top of the image, drawn directly on the map.
                     
@@ -674,7 +681,7 @@ class Map:
         draw = ImageDraw.Draw(self.image)
         
         # Determine the label for the image type
-        type_label = "Players" if self.image_type == "player" else "Tribes"
+        type_label = "Players" if image_type == "players" else "Tribes"
         title_text = f"{self.server.upper()}{self.world} - Top 10 {type_label}"
         
         # Draw the title text at the top of the map
@@ -690,7 +697,7 @@ class Map:
         top_type: str = "players",
         image: Image = None,
         specific: bool = False,
-        war_window_days: int = 3,
+        war_window_days: int = 30,
         war_top_pairs: int = 10,
         war_top_tribes: int = 10,
         war_min_exchange_villages: int = 50,
@@ -859,7 +866,7 @@ class Map:
 
             cell_size = self.cell_size * size_multiplier
 
-            upper_left = (image_x + self.spacing - cell_size // 2, image_y + self.spacing - cell_size // 2)
+            upper_left = (image_x - cell_size // 2, image_y - cell_size // 2)
             lower_right = (image_x + cell_size // 2 - self.spacing, image_y + cell_size // 2 - self.spacing)
 
             draw.rectangle([upper_left, lower_right], fill=color)
@@ -1023,18 +1030,18 @@ if __name__ == "__main__":
 
     data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
 
-    # Player timelapse - 2K resolution with aspect ratio correction
-    # map = Map(data_filter, max_coords=950, output_resolution="4K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
-    # top_players_image = map.draw_top_players(center_text=True)
-    # top_players_image_with_legend = map.draw_legend(top_type="players")
-    # top_players_image_with_legend.show()
-    # map.local_save("outputs/en146/top_players.png")
 
     # Tribe timelapse - 4K resolution with aspect ratio correction
-    map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
-    top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
-    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
-    top_tribes_image_with_war = map.draw_war_legend(window_days=30, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
-    final = map.finalize_image()
-    final.show()
-    # map.local_save("outputs/en146/top_tribes_with_war.png")
+    map = Map(data_filter, max_coords=1300, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
+    
+    top_tribe, top_player = map.draw_tribal_map()
+
+    top_tribe.show()
+    top_player.show()
+
+    map = Map(data_filter, max_coords=1100, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
+    
+    top_tribe, top_player = map.draw_tribal_map()
+
+    top_tribe.show()
+    top_player.show()
