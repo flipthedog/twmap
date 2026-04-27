@@ -19,6 +19,17 @@ from scipy.spatial import ConvexHull
 
 
 class Map:
+    """Generate one map per snapshot of a world
+
+    Raises:
+        ValueError: _description_
+        ValueError: _description_
+        ValueError: _description_
+        ValueError: _description_
+
+    Returns:
+        PIL.Image.Image: Generated map image as PIL Image object
+    """
 
     # Output resolution presets (16:9 aspect ratio)
     OUTPUT_RESOLUTIONS = {
@@ -27,7 +38,17 @@ class Map:
         "8K": {"width": 7680, "height": 4320},      # 7680x4320 (16:9)
     }
 
-    def __init__(self, data_filter: DataFilter, player_list: List[str] = None, tribe_list: List[str] = None, custom_color_map: dict = None, max_coords: int = 300, output_resolution: str = "2K", apply_aspect_ratio: bool = True, image_type: str = "tribe", server: str = None, world: str = None):
+    def __init__(self, data_filter: DataFilter,
+                player_list: List[str] = None, 
+                tribe_list: List[str] = None, 
+                custom_color_map: dict = None, 
+                max_coords: int = 750, 
+                output_resolution: str = "4K", 
+                apply_aspect_ratio: bool = True, 
+                image_type: str = "tribe", 
+                server: str = None, 
+                world: str = None
+                ):
         """Load it with TW data and create a map
 
         Args:
@@ -41,22 +62,20 @@ class Map:
             server (str): Game server code (e.g., "en", "de", "br") - extracted from data_filter if not provided
             world (str): World/game ID (e.g., "146", "147") - extracted from data_filter if not provided
         """
+
+        # Enable logging
+        self.logger = logging.getLogger(__name__)
+
+        # This allows for pulling distinct datasets with filters
         self.data_filter = data_filter
 
+        # These are the raw pandas df for a snapshot
         self.village_df = data_filter.village_df
         self.player_df = data_filter.player_df
         self.tribe_df = data_filter.tribe_df
         self.conquer_df = data_filter.conquer_df
         
-        self.printed_datetime = data_filter.printed_timestamp
-        self.printed_world = data_filter.world_id
-        self.server = server if server else getattr(data_filter, 'server', 'unknown')
-        self.world = world if world else str(self.printed_world) if self.printed_world else 'unknown'
-        
-        if self.printed_datetime is None:
-            self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-            # TODO: read this from the file
-
+        # Specific data filters to generate a map
         self.t10_players_v = self.data_filter.get_t10_player_villages()
         self.t10_tribes_v = self.data_filter.get_t10_tribe_villages()
         self.t10_players = self.data_filter.get_t10_players()
@@ -65,44 +84,68 @@ class Map:
         self.past_day_conquers_p10 = self.data_filter.get_past_day_t10_conquers_players()
         self.past_day_conquers_t10 = self.data_filter.get_past_day_t10_conquers_tribes()
         
+        # Information specific to a snapshot
+        self.printed_datetime = data_filter.printed_timestamp
+        self.printed_world = data_filter.world_id
+        self.server = server if server else getattr(data_filter, 'server', 'unknown')
+        self.world = world if world else str(self.printed_world) if self.printed_world else 'unknown'
+        
+        if self.printed_datetime is None:
+            self.printed_datetime = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+            # TODO: read this from the file
+        
         if player_list:
             logging.info(f"Player list: {player_list}")
             self.player_list = player_list
             self.player_village = self.data_filter.filter_villages_by_player_names(player_list)
             self.player_conquer = self.data_filter.get_past_day_conquers_by_player_names(player_list)
+        
         if tribe_list:
             logging.info(f"Tribe list: {tribe_list}")
             self.tribe_list = tribe_list
             self.tribe_village = self.data_filter.filter_villages_by_tribe_ids(tribe_list)
             self.tribe_conquer = self.data_filter.get_past_day_conquers_by_tribe_ids(tribe_list)
-               
+
+        # Image Generation Description:
+        # Tribal Wars worlds represent an X/Y coordinate grid which need to be mapped to an aspect ratio
+        # The image needs to be output in a standard aspect ratio size with a good resolution
+        # So a mapping takes place to select how much of the TW world to draw, then how to scale the world
+        # to the specific image size while maintaining the aspect ratio.
+
+        # Tribal wars worlds are centered on 500, 500       
         self.world_origin = 500
-        self.world_height = 1000
-        self.world_width = 1000
 
-        self.show_grid = True
-        self.show_center_lines = True
-
-        self.show_barbarians = True
-
-        self.max_border = max_coords - self.world_origin + 20
+        # world drawing configurations
+        self.world_height = max_coords  # Controlling how much of the world to include in the image
+        self.world_width = max_coords
+        self.show_grid = True  # Whether to draw grid lines for continents
+        self.grid_interval = 100  # Interval for grid lines (e.g., every 100 villages)
+        self.show_center_lines = True  # Thicker grid lines in the origin
+        self.show_barbarians = True  # Whether to include barbarian villages in the map
         
-        self.zoom = 3
-
-        self.cell_size = 5
-        self.spacing = 1
-
         self.player_village_size_multiplier = 2.0
 
+        self.spacing = 1  # spacing between villages in pixels, can be increased for better visibility at the cost of smaller drawings
+
         # Output resolution configuration
-        self.output_resolution = output_resolution
         self.target_width = self.OUTPUT_RESOLUTIONS[output_resolution]["width"]
         self.target_height = self.OUTPUT_RESOLUTIONS[output_resolution]["height"]
-        self.apply_aspect_ratio = apply_aspect_ratio
-        self.image_type = image_type
+        self.output_resolution = output_resolution
 
-        self.image_height = self.world_height * (self.cell_size + self.spacing)
-        self.image_width = self.world_width * (self.cell_size + self.spacing)
+        self.apply_aspect_ratio = apply_aspect_ratio
+        self.aspect_ratio = self.target_width / self.target_height
+        self.image_type = image_type  # player or tribe, used for labeling and color choices
+
+        self.image_height = self.target_height
+        self.image_width = int(self.image_height * self.aspect_ratio)
+        
+        scale_x = self.image_width / (self.world_width * self.spacing)
+        scale_y = self.image_height / (self.world_height * self.spacing)
+        self.scale = int(max(scale_x, scale_y))
+        
+        self.cell_size = self.scale  # size for each village cell in pixels
+
+        self.logger.info(f"Selected scaling factor: {self.scale:.2f} (cell size: {self.cell_size}px) for output resolution {output_resolution} ({self.image_width}x{self.image_height})")
 
         self.add_date_time = True
         self.add_watermark = True
@@ -136,6 +179,22 @@ class Map:
 
         self.entity_centroids = {}
 
+    def convert_world_to_image_coords(self, x, y):
+        """
+        Convert world coordinates to image pixel coordinates, accounting for zoom and centering.
+        
+        For example, if the world coordinates are (500, 500) and the world origin is at (500, 500), this will map to the center of the image.
+        """
+        # Center the world coordinates around the origin
+        centered_x = x - self.world_origin
+        centered_y = y - self.world_origin
+
+        # Convert to image coordinates
+        image_x = int(centered_x * self.scale + self.image_width / 2)
+        image_y = int(self.image_height / 2 + centered_y * self.scale)
+
+        return image_x, image_y
+
     def initial_map(self):
         """Create an initial map with all player villages and barbarians.
         """
@@ -148,18 +207,29 @@ class Map:
             cell_color = self.cell_color
             background_color = self.background_color
         
-        self.image = Image.new("RGBA", (self.image_height, self.image_width), background_color)
+        self.image = Image.new("RGBA", (self.image_width, self.image_height), background_color)
         
         draw = ImageDraw.Draw(self.image)
 
         for i in range(0, self.world_height):
 
             for j in range(0, self.world_width):
+                
+                x, y = self.convert_world_to_image_coords(i, j)
 
-                x = i * (self.cell_size + self.spacing)
-                y = j * (self.cell_size + self.spacing)
+                upper_left = (x + self.spacing - self.cell_size // 2, y + self.spacing - self.cell_size // 2)
+                lower_right = (x + self.cell_size // 2 - self.spacing, y + self.cell_size // 2 - self.spacing)
 
-                draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=cell_color)
+                draw.rectangle([upper_left, lower_right], fill=cell_color)
+        
+        # for i in range(0, self.world_height):
+
+        #     for j in range(0, self.world_width):
+
+        #         x = i * (self.cell_size + self.spacing)
+        #         y = j * (self.cell_size + self.spacing)
+
+        #         draw.rectangle([x, y, x+self.cell_size - self.spacing, y+self.cell_size - self.spacing], fill=cell_color)
 
         # draw player villages
         self.draw(self.village_df, None)
@@ -168,7 +238,7 @@ class Map:
         self.draw(self.village_df, "barbarian")
 
         if self.show_grid:
-            self.draw_grid(self.image, self.grid_color, 100)
+            self.draw_grid(self.image, self.grid_color, self.grid_interval, self.show_center_lines)
             
         if self.add_watermark:
             self.watermark("@tw-timelapse")
@@ -692,6 +762,8 @@ class Map:
 
         draw = ImageDraw.Draw(self.image)
 
+        # Draw foreground cells for each cell in the world
+
         for _, village in village_df.iterrows():
 
             if field == "playerid":
@@ -703,12 +775,14 @@ class Map:
             else:
                 color = self.village_color
 
-            x = village['x_coord'] * (self.cell_size + self.spacing)
-            y = village['y_coord'] * (self.cell_size + self.spacing)
+            image_x, image_y = self.convert_world_to_image_coords(village['x_coord'], village['y_coord'])
 
             cell_size = self.cell_size * size_multiplier
 
-            draw.rectangle([x, y, x + cell_size - self.spacing, y + cell_size - self.spacing], fill=color)
+            upper_left = (image_x + self.spacing - cell_size // 2, image_y + self.spacing - cell_size // 2)
+            lower_right = (image_x + cell_size // 2 - self.spacing, image_y + cell_size // 2 - self.spacing)
+
+            draw.rectangle([upper_left, lower_right], fill=color)
 
         return self.image
     
@@ -721,17 +795,31 @@ class Map:
         self.image = self.add_title_to_image(self.image)
         return self.image
 
-    def draw_grid(self, image: Image, color: str, grid_spacing: int):
-        
+    def draw_grid(self, image: Image, color: str, grid_spacing: int, show_center_lines: bool = True):
+        """Draw a grid around the center of the image, with grid spacing
+
+        Args:
+            image (Image): The image to draw the grid on
+            color (str): The color of the grid lines
+            grid_spacing (int): The spacing between grid lines in world coordinates (e.g. every 100 villages)
+            show_center_lines (bool): Whether to show the center lines
+        """
+
         draw = ImageDraw.Draw(image)
 
         for i in range(0, self.world_height, grid_spacing):
-            x = i * (self.cell_size + self.spacing) - 1
-            draw.line([x, 0, x, self.image_height], fill=color, width=1)
+            x, y = self.convert_world_to_image_coords(i, 0)
+            if show_center_lines and i == self.world_origin:
+                draw.line([x + self.cell_size // 2, 0, x + self.cell_size // 2, self.image_height], fill=color, width=3)
+            else:
+                draw.line([x + self.cell_size // 2, 0, x + self.cell_size // 2, self.image_height], fill=color, width=1)
         
         for j in range(0, self.world_width, grid_spacing):
-            y = j * (self.cell_size + self.spacing) - 1
-            draw.line([0, y, self.image_width, y], fill=color, width=1)
+            x, y = self.convert_world_to_image_coords(0, j)
+            if show_center_lines and j == self.world_origin:
+                draw.line([0, y + self.cell_size // 2, self.image_width, y + self.cell_size // 2], fill=color, width=3)
+            else:
+                draw.line([0, y + self.cell_size // 2, self.image_width, y + self.cell_size // 2], fill=color, width=1)
     
     def add_current_date_time(self):
         draw = ImageDraw.Draw(self.image)
@@ -743,7 +831,7 @@ class Map:
             draw.text((0, self.image.height - 10), self.printed_datetime + " UTC", fill=self.tw_color, font=date_time_font, anchor="lb")
         return self.image
 
-    def watermark(self, text: str):
+    def watermark(self, text: str = "@tw-timelapse"):
         draw = ImageDraw.Draw(self.image)
         watermark_font_size = int(self.font_size * 2)
         watermark_font = ImageFont.truetype("twmap/map/fonts/Roboto_Condensed-Bold.ttf", watermark_font_size)
@@ -753,61 +841,6 @@ class Map:
     def local_save(self, filename: str):
         """Save the image to file."""
         self.image.save(filename, quality=95)
-
-    def draw_zones_of_control(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
-        """
-        Draw zones of control for the top N players or tribes using Convex Hull and mark the centroid.
-
-        Args:
-            village_df (DataFrame): DataFrame containing the villages to cluster (must have playerid, tribeid).
-            top_n (int): Number of top players or tribes to draw zones for.
-            filter_type (str): Column to filter on, e.g. 'playerid' or 'tribeid'.
-        """
-        if filter_type == "playerid":
-            top_entities = self.t10_players.head(top_n)
-        elif filter_type == "tribeid":
-            top_entities = self.t10_tribes.head(top_n)
-        elif filter_type == "specifictribe":
-            top_entities = self.tribe_df[self.tribe_df['tag'].isin(self.tribe_list)].head(top_n)
-            filter_type = "tribeid"
-        elif filter_type == "specificplayer":
-            top_entities = self.player_df[self.player_df['name'].isin(self.player_list)].head(top_n)
-            filter_type = "playerid"
-        else:
-            raise ValueError("Invalid filter_type. Expected 'playerid' or 'tribeid'.")
-
-        draw = ImageDraw.Draw(self.image, 'RGBA')
-
-        for _, entity in top_entities.iterrows():
-            entity_id = entity[filter_type]
-            entity_villages = village_df[village_df[filter_type] == entity_id]
-            if entity_villages.empty:
-                continue
-
-            village_coords = entity_villages[['x_coord', 'y_coord']].values
-            if len(village_coords) > 2:
-                hull = ConvexHull(village_coords)
-                polygon = [
-                    (
-                        village_coords[vertex, 0] * (self.cell_size + self.spacing),
-                        village_coords[vertex, 1] * (self.cell_size + self.spacing)
-                    )
-                    for vertex in hull.vertices
-                ]
-                color = self.color_manager.get_color(entity_id)
-                color_rgba = tuple(int(color.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
-                fill_color = (color_rgba[0], color_rgba[1], color_rgba[2], 40)
-                draw.polygon(polygon, outline=color, fill=fill_color)
-
-                # Calculate centroid
-                centroid_x = village_coords[:, 0].mean() * (self.cell_size + self.spacing)
-                centroid_y = village_coords[:, 1].mean() * (self.cell_size + self.spacing)
-
-                # Draw the name at the centroid
-                name = urllib.parse.unquote_plus(entity['name'])
-                draw.text((centroid_x, centroid_y), name, fill=fill_color, font=self.font, anchor="mm")
-
-        return self.image
 
     def draw_centroid_text(self, village_df: DataFrame, top_n: int = 10, filter_type: str = "playerid"):
         """
@@ -882,18 +915,20 @@ class Map:
             
             # Draw the name at the centroid
             name = urllib.parse.unquote_plus(entity['name'])
+
+            x, y = self.convert_world_to_image_coords(centroid_x / (self.cell_size + self.spacing), centroid_y / (self.cell_size + self.spacing))
+
             # Scale outline offset based on font size
             outline_offset = max(2, int(4 * scale_factor))
             for dx in [-outline_offset, 0, outline_offset]:
                 for dy in [-outline_offset, 0, outline_offset]:
                     if dx != 0 or dy != 0:
-                        draw.text((centroid_x + dx, centroid_y + dy), name, fill=(0, 0, 0, 255), font=scaled_font, anchor="mm")
+                        draw.text((x + dx, y + dy), name, fill=(0, 0, 0, 100), font=scaled_font, anchor="mm")
             
-            draw.text((centroid_x, centroid_y), name, fill=fill_color, font=scaled_font, anchor="mm")
+            draw.text((x, y), name, fill=fill_color, font=scaled_font, anchor="mm")
 
             # save the centroid coordinates
-            self.entity_centroids[entity_id] = (centroid_x, centroid_y)
-            # print("Entity id: ", entity_id)
+            self.entity_centroids[entity_id] = (x, y)
 
         return self.image
 
@@ -994,18 +1029,19 @@ if __name__ == "__main__":
     data_filter = DataFilter(village_df, player_df, tribe_df, conquer_df, killall_df, killall_tribe_df, killatt_df, killdef_df, killtribeatt_df, killtribedef_df)
 
     # Player timelapse - 2K resolution with aspect ratio correction
-    map = Map(data_filter, max_coords=750, output_resolution="2K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
+    map = Map(data_filter, max_coords=950, output_resolution="4K", apply_aspect_ratio=True, image_type="player", server="en", world="146")
     top_players_image = map.draw_top_players(center_text=True)
-    top_players_image = map.crop_image(top_players_image)
-    top_players_image_with_legend = map.draw_legend(top_type="players")
-    top_players_image_with_legend.show()
+    # top_players_image = map.crop_image(top_players_image)
+    # top_players_image_with_legend = map.draw_legend(top_type="players")
+    # top_players_image_with_legend.show()
+    top_players_image.show()
     map.local_save("outputs/en146/top_players.png")
 
     # Tribe timelapse - 4K resolution with aspect ratio correction
-    map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
-    top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
-    top_tribes_image = map.crop_image(top_tribes_image)
-    top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
-    top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
-    top_tribes_image_with_war.show()
-    map.local_save("outputs/en146/top_tribes_with_war.png")
+    # map = Map(data_filter, max_coords=750, output_resolution="4K", apply_aspect_ratio=True, image_type="tribe", server="en", world="146")
+    # top_tribes_image = map.draw_top_tribes(zones_of_control=False, center_text=True)
+    # top_tribes_image = map.crop_image(top_tribes_image)
+    # top_tribes_image_with_legend = map.draw_legend(top_type="tribes")
+    # top_tribes_image_with_war = map.draw_war_legend(window_days=3, top_pairs=10, top_tribes=10, image=top_tribes_image_with_legend)
+    # top_tribes_image_with_war.show()
+    # map.local_save("outputs/en146/top_tribes_with_war.png")
