@@ -1,10 +1,12 @@
 import logging 
 import sys
 import os
+from datetime import datetime
 
 # Add the project root to Python path so we can import twmap modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from twmap.world import world_loader
 from twmap.world.world_loader import WorldLoader
 from twmap.mapfactory import MapFactory
 
@@ -67,18 +69,20 @@ def main():
     """Generate all missing maps for all worlds"""
     
     # Configuration
-    worlds = ["133"]  # Start with just one world for testing
-    interval = 2  # Generate every 2nd image
+    worlds = ["150"]  # Start with just one world for testing
+    interval = 1  # Generate every image.
     
     logging.info(f"Starting map generation for all worlds with interval {interval}")
-    
+    logging.info(f"Starting at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    start_time = datetime.now()
+
     for world in worlds:
         try:
             # Generate maps with interval setting
             generate_maps_for_world(
                 world=world, 
-                server="br", 
-                max_coords=1100, 
+                server="en", 
+                max_coords=50, 
                 max_workers=8, 
                 interval=interval,
                 regenerate_all=True,  # Regenerate all maps,
@@ -87,7 +91,10 @@ def main():
             logging.error(f"Error processing world {world}: {e}")
             continue
     
-    logging.info("Completed map generation for all worlds")
+    logging.info(f"Finished map generation for all worlds at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    end_time = datetime.now()
+    elapsed_time = end_time - start_time
+    logging.info(f"Total elapsed time: {elapsed_time}")
 
 if __name__ == "__main__":
     main()

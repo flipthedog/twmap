@@ -119,8 +119,8 @@ class Map:
         self.world_origin = 500
 
         # world drawing configurations
-        self.world_height = max_coords  # Controlling how much of the world to include in the image
-        self.world_width = max_coords
+        self.world_height = self.world_origin + max_coords  # Controlling how much of the world to include in the image
+        self.world_width = self.world_origin + max_coords
         self.show_grid = True  # Whether to draw grid lines for continents
         self.grid_interval = 100  # Interval for grid lines (e.g., every 100 villages)
         self.show_center_lines = True  # Thicker grid lines in the origin
@@ -246,13 +246,13 @@ class Map:
         
         draw = ImageDraw.Draw(self.image)
 
-        for i in range(0, self.world_height):
+        for i in range(0, self.world_height * 2):
 
-            for j in range(0, self.world_width):
+            for j in range(0, self.world_width * 2):
                 
-                x, y = self.convert_world_to_image_coords(i, j)
+                x, y = self.convert_world_to_image_coords(j, i)
 
-                upper_left = (x - self.cell_size // 2, y - self.cell_size // 2)
+                upper_left = (x - self.cell_size // 2 + self.spacing, y - self.cell_size // 2 + self.spacing)
                 lower_right = (x + self.cell_size // 2 - self.spacing, y + self.cell_size // 2 - self.spacing)
 
                 draw.rectangle([upper_left, lower_right], fill=cell_color)
@@ -639,12 +639,12 @@ class Map:
 
         for i, item in enumerate(graph_items):
             row_y = base_y + i * row_height
-            bar_top = row_y + max(4, int(graph_font_size * 0.25))
+            bar_top = row_y + max(4, int(graph_font_size * 0.25)) - 5
             bar_bottom = bar_top + bar_height
 
             # legend color box
             color = item.get("color", self.tw_color)
-            color_box_y = row_y + max(2, (row_height - color_box_size) // 2)
+            color_box_y = row_y + max(2, (row_height - color_box_size) // 2) - 10
             draw.rectangle([color_box_x, color_box_y, color_box_x + color_box_size, color_box_y + color_box_size], fill=color)
             # rank number (1., 2., etc.)
             draw.text((rank_x, row_y), f"{i + 1}.", fill=self.tw_color, font=graph_font, anchor="lt")
@@ -866,7 +866,7 @@ class Map:
 
             cell_size = self.cell_size * size_multiplier
 
-            upper_left = (image_x - cell_size // 2, image_y - cell_size // 2)
+            upper_left = (image_x - cell_size // 2 + self.spacing, image_y - cell_size // 2 + self.spacing)
             lower_right = (image_x + cell_size // 2 - self.spacing, image_y + cell_size // 2 - self.spacing)
 
             draw.rectangle([upper_left, lower_right], fill=color)
@@ -1032,16 +1032,16 @@ if __name__ == "__main__":
 
 
     # Tribe timelapse - 4K resolution with aspect ratio correction
-    map = Map(data_filter, max_coords=1300, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
+    map = Map(data_filter, max_coords=50, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
     
     top_tribe, top_player = map.draw_tribal_map()
 
     top_tribe.show()
     top_player.show()
 
-    map = Map(data_filter, max_coords=1100, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
+    # map = Map(data_filter, max_coords=1100, output_resolution="4K", apply_aspect_ratio=True, server="en", world="146")
     
-    top_tribe, top_player = map.draw_tribal_map()
+    # top_tribe, top_player = map.draw_tribal_map()
 
-    top_tribe.show()
-    top_player.show()
+    # top_tribe.show()
+    # top_player.show()

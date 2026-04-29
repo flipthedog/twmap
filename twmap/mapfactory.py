@@ -1,6 +1,6 @@
 import sys
 import os
-from copy import copy
+from copy import copy, deepcopy
 
 # Add the project root to Python path so we can import twmap modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -59,16 +59,12 @@ class MapFactory:
         
         map = Map(
                   data_filter,
-                  initial_map=self.initial_image,  # Pass the initial
                   max_coords=self.max_coords,
                   output_resolution="4K",
                   apply_aspect_ratio=True,
                   server=self.world_loader.server,
                   world=self.world_loader.world
                 )
-        
-        if self.initial_image is None:
-            self.initial_image = copy(map.initial_image)  # Store the initial blank image for resetting
         
         top_tribe, top_player = map.draw_tribal_map()
         

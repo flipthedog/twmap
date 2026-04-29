@@ -33,26 +33,22 @@ class DataFilter:
         self._t10_tribes = None
 
     def get_past_day_conquers(self):
-        """Get conquers from the past day. Uses the epoch timestamp to filter. Return filter on village df
+        """Get conquers from the past three days. Uses the epoch timestamp to filter. Return filter on village df
 
         Returns:
-            pd.DataFrame: DataFrame containing conquers from the past day.
+            pd.DataFrame: DataFrame containing conquers from the past three days.
         """
         if self._past_day_conquers is None:
-            data_pull_datetime = self.conquer_df["datetime"]
-            if data_pull_datetime.empty:
+            if self.conquer_df.empty:
                 logging.info("No conquers found in the dataset.")
                 return pd.DataFrame()
-            data_pull_datetime = pd.to_datetime(data_pull_datetime, format="%Y%m%d_%H%M%S")
-            data_pull_datetime = data_pull_datetime.astype(int) // 10**9
-            data_pull_datetime = data_pull_datetime.iloc[0]
-            past_three_days = data_pull_datetime - (86400 * 3)
+            past_three_days = pd.to_datetime(self.printed_timestamp).timestamp() - (86400 * 3)  # 3 days in seconds
             past_day_conquers = self.conquer_df[
                 (self.conquer_df["timestamp"] > past_three_days) & 
-                (self.conquer_df["timestamp"] <= data_pull_datetime)
+                (self.conquer_df["timestamp"] <= pd.to_datetime(self.printed_timestamp).timestamp())
             ]
             if past_day_conquers.empty:
-                logging.info("No conquers found in the past day.")
+                logging.info("No conquers found in the past three days.")
                 return pd.DataFrame()
             self._past_day_conquers = self.village_df[self.village_df["villageid"].isin(past_day_conquers["villageid"])]
         return self._past_day_conquers
