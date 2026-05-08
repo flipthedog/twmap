@@ -85,7 +85,7 @@ def main():
                 max_coords=50, 
                 max_workers=8, 
                 interval=interval,
-                regenerate_all=True,  # Regenerate all maps,
+                regenerate_all=False,  # Regenerate all maps,
             )
         except Exception as e:
             logging.error(f"Error processing world {world}: {e}")
