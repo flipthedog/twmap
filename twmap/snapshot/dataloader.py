@@ -127,6 +127,8 @@ class DataLoader:
             # Load player data
             content = self.retrieve_from_s3(player_path)
             player_df = pd.read_csv(StringIO(content), sep=",", header=None, names=PlayerModel.model_fields.keys(), index_col=False)
+            # Handle NaN values by converting them to empty strings
+            player_df = player_df.fillna("")
             player_schema = Pandantic(PlayerModel)
             player_model = player_schema.validate(player_df)
             player_model["datetime"] = "_".join(player_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -136,8 +138,17 @@ class DataLoader:
             # Load village data
             content = self.retrieve_from_s3(village_path)
             village_df = pd.read_csv(StringIO(content), sep=",", header=None, names=VillageModel.model_fields.keys(), index_col=False)
+            # Handle NaN values by converting them to empty strings
+            village_df = village_df.fillna("")
             village_schema = Pandantic(VillageModel)
-            village_model = village_schema.validate(village_df)
+            try:
+                village_model = village_schema.validate(village_df)
+            except Exception as e:
+                logging.error(f"Error validating village data: {e}")
+                logging.error(f"Village data content: {content}")
+                logging.error(f"Village data path: {village_path}")
+                raise e
+            
             village_model["datetime"] = "_".join(village_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
             village_model["world_id"] = village_path.split("/")[-1].split("_")[1]
             village_model["file_path"] = village_path
@@ -146,6 +157,8 @@ class DataLoader:
             content = self.retrieve_from_s3(conquer_path)
             if content.strip():  # Check if file has content
                 conquer_df = pd.read_csv(StringIO(content), sep=",", header=None, names=ConquerModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                conquer_df = conquer_df.fillna("")
                 conquer_schema = Pandantic(ConquerModel)
                 conquer_model = conquer_schema.validate(conquer_df)
                 # since the conquer file is always named conquer.txt, we extract datetime from village path
@@ -164,6 +177,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killall_path)
                 
                 killall_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillAllModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killall_df = killall_df.fillna("")
                 killall_schema = Pandantic(KillAllModel)
                 killall_model = killall_schema.validate(killall_df)
                 killall_model["datetime"] = "_".join(killall_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -174,6 +189,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killall_tribe_path)
 
                 killall_tribe_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillTribeModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killall_tribe_df = killall_tribe_df.fillna("")
                 killall_tribe_schema = Pandantic(KillTribeModel)
                 killall_tribe_model = killall_tribe_schema.validate(killall_tribe_df)
                 killall_tribe_model["datetime"] = "_".join(killall_tribe_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -184,6 +201,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killatt_path)
 
                 killatt_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillAttModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killatt_df = killatt_df.fillna("")
                 killatt_schema = Pandantic(KillAttModel)
                 killatt_model = killatt_schema.validate(killatt_df)
                 killatt_model["datetime"] = "_".join(killatt_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -194,6 +213,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killdef_path)
 
                 killdef_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillDefModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killdef_df = killdef_df.fillna("")
                 killdef_schema = Pandantic(KillDefModel)
                 killdef_model = killdef_schema.validate(killdef_df)
                 killdef_model["datetime"] = "_".join(killdef_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -204,6 +225,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killtribeatt_path)
 
                 killtribeatt_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillTribeAttModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killtribeatt_df = killtribeatt_df.fillna("")
                 killtribeatt_schema = Pandantic(KillTribeAttModel)
                 killtribeatt_model = killtribeatt_schema.validate(killtribeatt_df)
                 killtribeatt_model["datetime"] = "_".join(killtribeatt_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
@@ -214,6 +237,8 @@ class DataLoader:
                 content = self.retrieve_from_s3(killtribedef_path)
 
                 killtribedef_df = pd.read_csv(StringIO(content), sep=",", header=None, names=KillTribeDefModel.model_fields.keys(), index_col=False)
+                # Handle NaN values by converting them to empty strings
+                killtribedef_df = killtribedef_df.fillna("")
                 killtribedef_schema = Pandantic(KillTribeDefModel)
                 killtribedef_model = killtribedef_schema.validate(killtribedef_df)
                 killtribedef_model["datetime"] = "_".join(killtribedef_path.split("/")[-1].split("_")[2:4]).replace(".txt", "")
