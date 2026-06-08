@@ -69,8 +69,8 @@ def main():
     """Generate all missing maps for all worlds"""
     
     # Configuration
-    worlds = ["150"]  # Start with just one world for testing
-    interval = 1  # Generate every image.
+    worlds = ["96"]  # Start with just one world for testing
+    interval = 2  # Generate every image.
     
     logging.info(f"Starting map generation for all worlds with interval {interval}")
     logging.info(f"Starting at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
@@ -81,11 +81,11 @@ def main():
             # Generate maps with interval setting
             generate_maps_for_world(
                 world=world, 
-                server="en", 
-                max_coords=50, 
+                server="tr", 
+                max_coords=200, 
                 max_workers=8, 
                 interval=interval,
-                regenerate_all=False,  # Regenerate all maps,
+                regenerate_all=True,  # Regenerate all maps,
             )
         except Exception as e:
             logging.error(f"Error processing world {world}: {e}")
